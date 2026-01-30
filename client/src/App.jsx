@@ -1,17 +1,20 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from 'react-router-dom';
 
-import Home from "./pages/home";
-import Marketplace from "./pages/MarketPlace";
-import MyListings from "./pages/MyListing";
-import ListingDetails from "./pages/ListingDetails";
-import ManageListing from "./pages/ManageListing";
-import Messages from "./pages/Messages";
-import MyOrders from "./pages/MyOrders";
-import Loading from "./pages/Loading";
+import Home from './pages/home';
+import Marketplace from './pages/MarketPlace';
+import MyListings from './pages/MyListing';
+import ListingDetails from './pages/ListingDetails';
+import ManageListing from './pages/ManageListing';
+import Messages from './pages/Messages';
+import MyOrders from './pages/MyOrders';
+import Loading from './pages/Loading';
+import Navbar from './components/Navbar';
 
 const App = () => {
+  const { pathname } = useLocation();
   return (
     <div>
+      {!pathname.includes('/admin') && <Navbar />}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/marketplace" element={<Marketplace />} />
