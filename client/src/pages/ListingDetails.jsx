@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { setChat } from '../app/features/ChatSlice';
+import { useDispatch } from 'react-redux';
+
 import {
   ArrowUpRightFromSquareIcon,
   CheckCircle2,
@@ -14,6 +17,7 @@ import { getProfileLink } from '../assets/assets';
 import { ShoppingBagIcon } from 'lucide-react';
 
 const ListingDetails = () => {
+  const dispatch = useDispatch();
   const { listingId } = useParams();
   const { listings } = useSelector((state) => state.listing);
 
@@ -27,7 +31,7 @@ const ListingDetails = () => {
   };
 
   const loadchat = () => {
-    // load chat logic
+    dispatch(setChat({ listing: listing }));
   };
   useEffect(() => {
     if (!listings?.length) return;
@@ -252,13 +256,19 @@ const ListingDetails = () => {
               })}
             </p>
 
-            <button className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg transition">
+            <button
+              onClick={loadchat}
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg transition"
+            >
               <MessageSquare className="w-4 h-4" />
               Chat
             </button>
 
             {listing.isCredentialChanged && (
-              <button className="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition text-sm font-medium flex items-center justify-center gap-2">
+              <button
+                onClick={purchaseAccount}
+                className="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition text-sm font-medium flex items-center justify-center gap-2"
+              >
                 <ShoppingBagIcon className="size-4" />
                 Purchase
               </button>
