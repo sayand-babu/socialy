@@ -16,3 +16,15 @@ button {
 .cl-drawerRoot {
   z-index: 100;
 }
+
+.input {
+  @apply w-full rounded-lg border border-gray-300 px-3 py-3 text-sm bg-white outline-none transition duration-200;
+}
+
+.input:focus {
+  @apply border-indigo-500 ring-1 ring-indigo-500;
+}
+
+.label {
+  @apply text-sm font-medium text-gray-700;
+}
