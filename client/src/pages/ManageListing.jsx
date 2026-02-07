@@ -106,18 +106,29 @@ const ManageListing = () => {
     }));
   };
 
+  /* ✅ FINAL IMAGE UPLOAD LOGIC */
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    if (files.length + formData.images.length > 5) {
-      return toast.error('You can upload up to 5 images');
+    const remainingSlots = 5 - formData.images.length;
+
+    if (remainingSlots <= 0) {
+      toast.error('You can upload only 5 images');
+      return;
+    }
+
+    if (files.length > remainingSlots) {
+      toast.error('You can upload only 5 images');
     }
 
     setFormData((prev) => ({
       ...prev,
-      images: [...prev.images, ...files],
+      images: [...prev.images, ...files.slice(0, remainingSlots)],
     }));
+
+    // Reset input so same file selection triggers again
+    e.target.value = '';
   };
 
   const removeImage = (index) => {
@@ -253,93 +264,19 @@ const ManageListing = () => {
               />
             </div>
           </div>
-
-          <div className="grid md:grid-cols-2 gap-4 mt-4">
-            <div className="flex flex-col gap-1">
-              <label className="label">Primary Audience Country</label>
-              <input
-                name="country"
-                value={formData.country}
-                onChange={handleChange}
-                placeholder="e.g. United States"
-                className="input"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="label">Primary Audience Age Range</label>
-              <select
-                name="age_range"
-                value={formData.age_range}
-                onChange={handleChange}
-                className="input"
-              >
-                <option value="">Select age range</option>
-                {ageRanges.map((age) => (
-                  <option key={age} value={age}>
-                    {age}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-2 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                name="verified"
-                checked={formData.verified}
-                onChange={handleChange}
-              />
-              Account is verified on the platform
-            </label>
-
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                name="monetized"
-                checked={formData.monetized}
-                onChange={handleChange}
-              />
-              Account is monetized
-            </label>
-          </div>
-        </section>
-
-        {/* PRICING */}
-        <section className="bg-white border rounded-lg p-5">
-          <h3 className="font-medium mb-4">Pricing & Description</h3>
-
-          <div className="flex flex-col gap-1 mb-4">
-            <label className="label">Asking Price (USD)</label>
-            <input
-              name="price"
-              value={formData.price}
-              onChange={handleChange}
-              placeholder="e.g. 1500"
-              className="input"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="label">Description</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Describe the account, audience, and value"
-              className="input resize-none"
-            />
-          </div>
         </section>
 
         {/* IMAGES */}
         <section className="bg-white border rounded-lg p-5">
-          <h3 className="font-medium mb-4">Screenshots & Proof</h3>
+          <h3 className="font-medium mb-4">
+            Screenshots & Proof ({formData.images.length}/5)
+          </h3>
 
-          <label className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center cursor-pointer text-gray-500">
+          <label
+            className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center cursor-pointer text-gray-500
+              ${formData.images.length >= 5 ? 'opacity-50' : ''}
+            `}
+          >
             <Upload />
             <span className="text-sm mt-1">Choose Files</span>
             <input type="file" multiple hidden onChange={handleImageUpload} />
@@ -373,7 +310,7 @@ const ManageListing = () => {
         <div className="flex justify-end gap-3">
           <button
             type="button"
-            onClick={() => navigate('/my-listings')}
+            onClick={() => navigate(-1)}
             className="px-4 py-2 border rounded-lg"
           >
             Cancel
