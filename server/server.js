@@ -2,8 +2,7 @@ import express from "express";
 import "dotenv/config";
 import cors from "cors";
 import { clerkMiddleware } from "@clerk/express";
-import { Inngest, functions } from "./inngest/index.js";
-import { Serve } from "./inngest/index.js";
+import { inngest, functions, serve } from "./inngest/index.js";
 
 const app = express(); // create the exprress  app
 
@@ -14,7 +13,6 @@ app.use(cors());
 app.use(clerkMiddleware());
 
 app.get("/", (req, res) => res.send("server is alive"));
-app.use("/api/inngest/", Serve({ client: Inngest, functions }));
 app.use("/api/inngest/", serve({ client: inngest, functions }));
 
 // add the prot

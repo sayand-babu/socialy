@@ -1,7 +1,10 @@
-import { Inngest } from "inngest";
+import { Inngest, serve } from "inngest";
 import prisma from "../config/prisma.js";
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "socjal-media-marketplace" });
+
+// Export Inngest and serve for use in server
+export { Inngest, serve };
 
 // to add the user detail to the database
 const syncUserCreation = inngest.createFunction(
