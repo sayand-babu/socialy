@@ -1,4 +1,5 @@
-import { Inngest, serve } from "inngest";
+import { Inngest } from "inngest";
+import { serve } from "inngest/express";
 import prisma from "../../config/prisma.js";
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "socjal-media-marketplace" });
