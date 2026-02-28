@@ -2,7 +2,7 @@ import express from "express";
 import "dotenv/config";
 import cors from "cors";
 import { clerkMiddleware } from "@clerk/express";
-import { inngest, functions, serve } from "./inngest/index.js";
+import { inngest, functions, serve } from "./src/inngest/index.js";
 
 const app = express(); // create the exprress  app
 
