@@ -19,4 +19,9 @@ app.use("/api/inngest/", serve({ client: inngest, functions }));
 
 // add the prot
 const port = process.env.port || 3000;
-app.listen(port, () => console.log(`server running on the port ${port}`));
+if (process.env.NODE_ENV === "development") {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
+}
