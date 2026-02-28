@@ -3,7 +3,7 @@ import "dotenv/config";
 import cors from "cors";
 import { clerkMiddleware } from "@clerk/express";
 import { Inngest, functions } from "inngest";
-import { Serve } from "./src/inngest/index.js";
+import { Serve } from "./inngest/index.js";
 
 const app = express(); // create the exprress  app
 
