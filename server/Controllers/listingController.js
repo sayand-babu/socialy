@@ -1,5 +1,6 @@
+import { toFile } from "@imagekit/nodejs";
 import imagekit from "../config/imagekit.js";
-import prisma from "../configs/prisma.js";
+import prisma from "../config/prisma.js";
 
 // Controller For Adding Listing to Database
 export const addListing = async (req, res) => {
@@ -31,14 +32,12 @@ export const addListing = async (req, res) => {
     accountDetails.username.startsWith("@")
       ? (accountDetails.username = accountDetails.username.slice(1))
       : null;
-    const uploadimages = req.files.map(async (file) => {
-      const response = await client.files.upload({
-        file: fs.createReadStream("file.path"),
-        fileName: `${Date.now()}.png`,
+    const uploadimages = (req.files || []).map(async (file) => {
+      const response = await imagekit.files.upload({
+        file: await toFile(file.buffer, file.originalname),
+        fileName: `${Date.now()}-${file.originalname}`,
         folder: "/socialy",
-        tranfromation: {
-          pre: "w-1280 h-auto",
-        },
+        transformation: { pre: "w-1280,h-auto" },
       });
       return response.url;
     });
@@ -125,7 +124,10 @@ export const updateListing = async (req, res) => {
     const accountDetails = JSON.parse(req.body.accountDetails);
 
     // Limit total images to 5
-    if (req.files.length + accountDetails.images.length > 5) {
+    const existingImages = accountDetails.images || [];
+    const uploadedFiles = req.files || [];
+
+    if (uploadedFiles.length + existingImages.length > 5) {
       return res.status(400).json({
         message: "You can only upload up to 5 images",
       });
@@ -159,11 +161,11 @@ export const updateListing = async (req, res) => {
 
     let images = [];
 
-    if (req.files.length > 0) {
-      const uploadImages = req.files.map(async (file) => {
+    if (uploadedFiles.length > 0) {
+      const uploadImages = uploadedFiles.map(async (file) => {
         const response = await imagekit.files.upload({
-          file: fs.createReadStream(file.path),
-          fileName: `${Date.now()}.png`,
+          file: await toFile(file.buffer, file.originalname),
+          fileName: `${Date.now()}-${file.originalname}`,
           folder: "flip-earn",
           transformation: { pre: "w-1280,h-auto" },
         });

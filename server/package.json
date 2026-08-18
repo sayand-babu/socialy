@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "postinstall": "npx prisma generate",
-    "server": "nodemon sever.js",
-    "start": "node server.js"
+    "server": "nodemon --env-file=.env server.js",
+    "start": "node --env-file=.env server.js"
   },
   "keywords": [],
   "author": "",
