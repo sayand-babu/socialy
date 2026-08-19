@@ -77,7 +77,7 @@ function ListingCard({ listing }) {
         {/* FOOTER */}
         <div className="flex items-center justify-between pt-3 ">
           <p className="text-lg font-bold text-gray-900">
-            ${listing.price.toLocaleString()}
+            {import.meta.env.VITE_CURRENCY || '₹'}{listing.price.toLocaleString()}
           </p>
 
           <button

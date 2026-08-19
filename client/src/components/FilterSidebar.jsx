@@ -75,35 +75,50 @@ const FilterSidebar = ({ showFilterPhone, setShowFilterPhone ,filters, setFilter
   };
 
   /* -------------------------------
-     SEARCH ↔ URL (ONLY SEARCH)
+     DEBOUNCED SEARCH ↔ URL
   -------------------------------- */
+  const [searchInput, setSearchInput] = useState(searchParams.get("search") || filters.search || "");
+
   useEffect(() => {
-    setFilters((prev) => ({
-      ...prev,
-      search: searchParams.get("search") || "",
-    }));
+    const urlSearch = searchParams.get("search") || "";
+    setSearchInput(urlSearch);
+    if (filters.search !== urlSearch) {
+      setFilters((prev) => ({ ...prev, search: urlSearch }));
+    }
   }, [searchParams]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== (filters.search || "")) {
+        onFiltersChange({ ...filters, search: searchInput });
+        const params = new URLSearchParams(searchParams);
+        if (searchInput.trim()) {
+          params.set("search", searchInput.trim());
+        } else {
+          params.delete("search");
+        }
+        setSearchParams(params, { replace: true });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const onChangeSearch = (e) => {
-    const value = e.target.value;
-
-    onFiltersChange({ ...filters, search: value });
-
-    const params = new URLSearchParams(searchParams);
-    value.trim() ? params.set("search", value) : params.delete("search");
-    setSearchParams(params);
+    setSearchInput(e.target.value);
   };
 
   /* -------------------------------
      CLEAR FILTERS
   -------------------------------- */
   const onClearFilters = () => {
+    setSearchInput("");
     setFilters(DEFAULT_FILTERS);
 
     // clear search from URL
     const params = new URLSearchParams(searchParams);
     params.delete("search");
-    setSearchParams(params);
+    setSearchParams(params, { replace: true });
   };
 
   /* -------------------------------

@@ -2,14 +2,14 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { getPublicListings, getUserListings } from "../../services/listingService";
 
 /**
- * Async thunk to fetch public listings from the backend
+ * Async thunk to fetch public listings from the backend with filters, sort and pagination
  */
 export const fetchPublicListings = createAsyncThunk(
   "listing/fetchPublicListings",
-  async (_, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
-      const listings = await getPublicListings();
-      return listings;
+      const data = await getPublicListings(params);
+      return data;
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch listings"
@@ -39,6 +39,14 @@ const listingSlice = createSlice({
   name: "listing",
   initialState: {
     listings: [],
+    pagination: {
+      total: 0,
+      page: 1,
+      limit: 12,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPrevPage: false,
+    },
     userListings: [],
     loading: false,
     error: null,
@@ -51,6 +59,26 @@ const listingSlice = createSlice({
   reducers: {
     setListings: (state, action) => {
       state.listings = action.payload;
+    },
+    setUserListings: (state, action) => {
+      state.userListings = action.payload;
+    },
+    updateUserListingItem: (state, action) => {
+      const updated = action.payload;
+      state.userListings = state.userListings.map((item) =>
+        item.id === updated.id ? { ...item, ...updated } : item
+      );
+      state.listings = state.listings.map((item) =>
+        item.id === updated.id ? { ...item, ...updated } : item
+      );
+    },
+    removeUserListingItem: (state, action) => {
+      const listingId = action.payload;
+      state.userListings = state.userListings.filter((item) => item.id !== listingId);
+      state.listings = state.listings.filter((item) => item.id !== listingId);
+    },
+    setUserBalance: (state, action) => {
+      state.balance = action.payload;
     },
     clearError: (state) => {
       state.error = null;
@@ -65,7 +93,8 @@ const listingSlice = createSlice({
       })
       .addCase(fetchPublicListings.fulfilled, (state, action) => {
         state.loading = false;
-        state.listings = action.payload;
+        state.listings = action.payload?.listings || (Array.isArray(action.payload) ? action.payload : []);
+        state.pagination = action.payload?.pagination || state.pagination;
       })
       .addCase(fetchPublicListings.rejected, (state, action) => {
         state.loading = false;
@@ -90,6 +119,13 @@ const listingSlice = createSlice({
   },
 });
 
-export const { setListings, clearError } = listingSlice.actions;
+export const {
+  setListings,
+  setUserListings,
+  updateUserListingItem,
+  removeUserListingItem,
+  setUserBalance,
+  clearError,
+} = listingSlice.actions;
 
 export default listingSlice.reducer;

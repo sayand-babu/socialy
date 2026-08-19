@@ -436,13 +436,13 @@ const ManageListing = () => {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="label">Price (USD) *</label>
+              <label className="label">Price (₹ INR) *</label>
               <input
                 name="price"
                 value={formData.price}
                 onChange={handleChange}
                 type="number"
-                placeholder="e.g. 2500"
+                placeholder="e.g. 25000"
                 className="input"
               />
             </div>
@@ -453,7 +453,7 @@ const ManageListing = () => {
                 name="country"
                 value={formData.country}
                 onChange={handleChange}
-                placeholder="e.g. USA"
+                placeholder="e.g. India"
                 className="input"
               />
             </div>

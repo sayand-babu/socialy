@@ -8,6 +8,7 @@ import {
   MenuIcon,
   MessageCircleMoreIcon,
   XIcon,
+  ShieldCheck,
 } from 'lucide-react';
 import { useUser, useClerk, UserButton } from '@clerk/clerk-react';
 
@@ -106,6 +107,18 @@ function Navbar() {
                   }}
                 />
               </UserButton.MenuItems>
+              {user?.publicMetadata?.role === 'admin' && (
+                <UserButton.MenuItems>
+                  <UserButton.Action
+                    label="Admin Portal"
+                    labelIcon={<ShieldCheck size={16} />}
+                    onClick={() => {
+                      navigate('/admin');
+                      scrollTo(0, 0);
+                    }}
+                  />
+                </UserButton.MenuItems>
+              )}
             </UserButton>
           )}
           <MenuIcon

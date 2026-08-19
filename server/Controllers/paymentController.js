@@ -1,0 +1,182 @@
+import crypto from "crypto";
+import prisma from "../config/prisma.js";
+import { razorpayInstance, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/razorpay.js";
+import { ensureUserExists } from "../utils/userHelper.js";
+import { delCache, delCachePattern } from "../config/redis.js";
+
+/**
+ * Creates a Razorpay Order for purchasing a marketplace listing
+ */
+export const createRazorpayOrder = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    await ensureUserExists(userId);
+
+    const { listingId } = req.body;
+    if (!listingId) {
+      return res.status(400).json({ message: "Listing ID is required" });
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+    });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    if (listing.status !== "active") {
+      return res.status(400).json({ message: "This listing is no longer available for purchase" });
+    }
+
+    if (listing.ownerId === userId) {
+      return res.status(400).json({ message: "You cannot purchase your own listing" });
+    }
+
+    // Razorpay amount is in the smallest currency unit (paise / cents)
+    const amountInPaise = Math.round(Number(listing.price) * 100);
+
+    const options = {
+      amount: amountInPaise,
+      currency: process.env.RAZORPAY_CURRENCY || "INR",
+      receipt: `rcpt_${listing.id.replace(/-/g, "").slice(0, 20)}`,
+      notes: {
+        listingId: listing.id,
+        buyerId: userId,
+        sellerId: listing.ownerId,
+        listingTitle: listing.title,
+      },
+    };
+
+    let order;
+    try {
+      order = await razorpayInstance.orders.create(options);
+    } catch (rzpError) {
+      console.error("Razorpay order creation failed:", rzpError);
+      
+      const isAuthError =
+        rzpError?.statusCode === 401 ||
+        rzpError?.error?.description?.toLowerCase().includes("auth") ||
+        RAZORPAY_KEY_SECRET?.includes("*");
+
+      if (isAuthError) {
+        return res.status(500).json({
+          message: "Razorpay Authentication Failed",
+          details:
+            "Your RAZORPAY_KEY_SECRET in server/.env is masked with asterisks (***) or is invalid. Please copy the full secret key from Razorpay Dashboard (Settings > API Keys).",
+        });
+      }
+
+      return res.status(500).json({
+        message: "Failed to initialize payment gateway order",
+        details: rzpError.message || rzpError.error?.description,
+      });
+    }
+
+    return res.status(200).json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: RAZORPAY_KEY_ID,
+      listing: {
+        id: listing.id,
+        title: listing.title,
+        price: listing.price,
+        platform: listing.platform,
+        username: listing.username,
+      },
+    });
+  } catch (error) {
+    console.error("Create Razorpay Order Error:", error);
+    return res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Verifies the cryptographic HMAC-SHA256 signature from Razorpay and executes atomic escrow purchase
+ */
+export const verifyRazorpayPayment = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    await ensureUserExists(userId);
+
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      listingId,
+    } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !listingId) {
+      return res.status(400).json({ message: "Missing required payment verification parameters" });
+    }
+
+    // Cryptographic signature verification
+    const expectedSignature = crypto
+      .createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({
+        message: "Invalid payment signature. Payment verification failed.",
+      });
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+    });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    if (listing.status !== "active") {
+      return res.status(400).json({ message: "Listing has already been sold or deleted" });
+    }
+
+    // Atomic Database Transaction
+    const [transaction, updatedListing] = await prisma.$transaction([
+      // 1. Create Transaction record
+      prisma.transaction.create({
+        data: {
+          listingId: listing.id,
+          ownerId: listing.ownerId,
+          userId,
+          amount: listing.price,
+          isPaid: true,
+        },
+      }),
+
+      // 2. Mark listing as sold
+      prisma.listing.update({
+        where: { id: listing.id },
+        data: { status: "sold" },
+      }),
+
+      // 3. Credit seller wallet
+      prisma.user.update({
+        where: { id: listing.ownerId },
+        data: {
+          earned: { increment: listing.price },
+        },
+      }),
+    ]);
+
+    // Invalidate Redis caches
+    await Promise.all([
+      delCache("listings:public", `listing:detail:${listingId}`, "admin:dashboard:stats"),
+      delCachePattern("listings:*"),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified successfully and account credentials secured in your Escrow Vault!",
+      transaction,
+      listing: updatedListing,
+    });
+  } catch (error) {
+    console.error("Verify Razorpay Payment Error:", error);
+    return res.status(500).json({ message: error.code || error.message });
+  }
+};

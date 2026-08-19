@@ -13,10 +13,7 @@ const chatSlice = createSlice({
     setChat: (state, action) => {
       state.listing = action.payload.listing;
       state.isOpen = true;
-
-      if (action.payload.chatId) {
-        state.chatId = action.payload.chatId;
-      }
+      state.chatId = action.payload.chatId || null;
     },
 
     clearChat: (state) => {
