@@ -115,6 +115,8 @@ const ListingDetails = () => {
         },
         handler: async function (response) {
           try {
+            // Fetch fresh Clerk JWT in case token expired while user was in checkout
+            const freshToken = await getToken();
             await verifyPayment(
               {
                 razorpay_order_id: response.razorpay_order_id,
@@ -122,12 +124,13 @@ const ListingDetails = () => {
                 razorpay_signature: response.razorpay_signature,
                 listingId: listing.id,
               },
-              token
+              freshToken
             );
 
             toast.success("🎉 Payment verified! Account credentials unlocked in your Vault.");
             navigate("/my-orders");
           } catch (verifyErr) {
+            console.error("Verification error details:", verifyErr);
             toast.error(
               verifyErr.response?.data?.message || "Payment verification failed. Please contact support."
             );
@@ -274,11 +277,26 @@ const ListingDetails = () => {
                     <span className="capitalize">{listing.platform}</span>
                   </p>
 
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {listing.verified && (
-                      <span className="inline-flex items-center text-xs font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md">
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    {(listing.platformAssured || listing.isCredentialVerified) ? (
+                      <span className="inline-flex items-center text-xs font-semibold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-100">
                         <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-indigo-600" />
-                        Platform Verified
+                        🛡️ Platform Assured
+                      </span>
+                    ) : listing.isCredentialSubmitted ? (
+                      <span className="inline-flex items-center text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md border border-emerald-100">
+                        <Lock className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                        🔒 Escrow Ready
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-xs font-medium bg-amber-50 text-amber-700 px-2.5 py-1 rounded-md border border-amber-100">
+                        💬 Escrow Pending
+                      </span>
+                    )}
+
+                    {listing.verified && (
+                      <span className="inline-flex items-center text-xs font-medium bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md">
+                        ✓ Blue Tick
                       </span>
                     )}
 
@@ -462,7 +480,7 @@ const ListingDetails = () => {
               </div>
             </div>
 
-            {/* Chat button */}
+            {/* Chat button (if not owner) */}
             {!isOwner && (
               <button
                 onClick={loadchat}
@@ -473,15 +491,37 @@ const ListingDetails = () => {
               </button>
             )}
 
-            {/* Buy button */}
+            {/* Smart Escrow Buy Action */}
             {isAvailableForPurchase && (
-              <button
-                onClick={() => setShowPurchaseConfirm(true)}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
-              >
-                <ShoppingBag className="size-5" />
-                Buy Now (Escrow)
-              </button>
+              listing.isCredentialSubmitted ? (
+                <button
+                  onClick={() => setShowPurchaseConfirm(true)}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
+                >
+                  <ShoppingBag className="size-5" />
+                  Buy Now (Escrow)
+                </button>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900">
+                    <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <Lock size={14} className="text-amber-700" />
+                      <span>Escrow Vault Pending</span>
+                    </div>
+                    <p className="text-amber-800 text-[11px] leading-relaxed">
+                      Seller has not deposited credentials into the escrow vault yet. Message the seller to request credential submission before purchasing.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={loadchat}
+                    className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    <MessageSquare className="size-4" />
+                    Chat to Request Escrow Lock
+                  </button>
+                </div>
+              )
             )}
 
             {listing.status === 'sold' && (

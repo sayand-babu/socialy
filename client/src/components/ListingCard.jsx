@@ -35,8 +35,8 @@ function ListingCard({ listing }) {
             </p>
           </div>
 
-          {listing.verified && (
-            <BadgeCheck className="text-green-500 mt-1" size={18} />
+          {(listing.platformAssured || listing.isCredentialVerified) && (
+            <BadgeCheck className="text-emerald-500 mt-1" size={18} title="Verified by Socialy Admin" />
           )}
         </div>
 
@@ -54,16 +54,30 @@ function ListingCard({ listing }) {
           )}
         </div>
 
-        {/* TAGS */}
-        <div className="flex gap-3 mt-3 text-xs">
-          <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-600 capitalize">
+        {/* TAGS & BADGES */}
+        <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+          <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-600 capitalize font-medium">
             {listing.niche}
           </span>
 
           {listing.country && (
             <span className="flex items-center gap-1 text-gray-500">
-              <MapPin size={14} />
+              <MapPin size={13} />
               {listing.country}
+            </span>
+          )}
+
+          {listing.platformAssured ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-100">
+              🛡️ Platform Assured
+            </span>
+          ) : listing.isCredentialSubmitted ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-[11px] border border-emerald-100">
+              🔒 Escrow Ready
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium text-[11px] border border-amber-100">
+              💬 Chat to Buy
             </span>
           )}
         </div>

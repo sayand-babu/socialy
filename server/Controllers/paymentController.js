@@ -1,6 +1,10 @@
 import crypto from "crypto";
 import prisma from "../config/prisma.js";
-import { razorpayInstance, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../config/razorpay.js";
+import {
+  getRazorpayInstance,
+  getRazorpayKeyId,
+  getRazorpayKeySecret,
+} from "../config/razorpay.js";
 import { ensureUserExists } from "../utils/userHelper.js";
 import { delCache, delCachePattern } from "../config/redis.js";
 
@@ -33,6 +37,17 @@ export const createRazorpayOrder = async (req, res) => {
       return res.status(400).json({ message: "You cannot purchase your own listing" });
     }
 
+    if (!listing.isCredentialSubmitted) {
+      return res.status(400).json({
+        message:
+          "This account cannot be purchased yet because the seller has not submitted credentials to the Escrow Vault. Please chat with the seller to request credential submission.",
+      });
+    }
+
+    const keyId = getRazorpayKeyId();
+    const keySecret = getRazorpayKeySecret();
+    const razorpay = getRazorpayInstance();
+
     // Razorpay amount is in the smallest currency unit (paise / cents)
     const amountInPaise = Math.round(Number(listing.price) * 100);
 
@@ -50,20 +65,20 @@ export const createRazorpayOrder = async (req, res) => {
 
     let order;
     try {
-      order = await razorpayInstance.orders.create(options);
+      order = await razorpay.orders.create(options);
     } catch (rzpError) {
       console.error("Razorpay order creation failed:", rzpError);
-      
+
       const isAuthError =
         rzpError?.statusCode === 401 ||
         rzpError?.error?.description?.toLowerCase().includes("auth") ||
-        RAZORPAY_KEY_SECRET?.includes("*");
+        keySecret?.includes("*");
 
       if (isAuthError) {
         return res.status(500).json({
           message: "Razorpay Authentication Failed",
           details:
-            "Your RAZORPAY_KEY_SECRET in server/.env is masked with asterisks (***) or is invalid. Please copy the full secret key from Razorpay Dashboard (Settings > API Keys).",
+            "Your RAZORPAY_KEY_SECRET in server/.env is invalid or contains asterisks. Please verify the active Key ID and Secret.",
         });
       }
 
@@ -77,7 +92,7 @@ export const createRazorpayOrder = async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: RAZORPAY_KEY_ID,
+      keyId: keyId,
       listing: {
         id: listing.id,
         title: listing.title,
@@ -111,9 +126,11 @@ export const verifyRazorpayPayment = async (req, res) => {
       return res.status(400).json({ message: "Missing required payment verification parameters" });
     }
 
+    const keySecret = getRazorpayKeySecret();
+
     // Cryptographic signature verification
     const expectedSignature = crypto
-      .createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", keySecret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
@@ -133,6 +150,12 @@ export const verifyRazorpayPayment = async (req, res) => {
 
     if (listing.status !== "active") {
       return res.status(400).json({ message: "Listing has already been sold or deleted" });
+    }
+
+    if (!listing.isCredentialSubmitted) {
+      return res.status(400).json({
+        message: "Cannot finalize escrow purchase: Account credentials not submitted to Vault.",
+      });
     }
 
     // Atomic Database Transaction
