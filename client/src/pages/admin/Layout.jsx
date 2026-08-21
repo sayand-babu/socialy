@@ -38,7 +38,7 @@ const Layout = () => {
                 } else {
                     setIsAdmin(false);
                 }
-            } catch (error) {
+            } catch {
                 setIsAdmin(false);
             } finally {
                 setIsLoading(false);

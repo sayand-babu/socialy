@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { useAuth } from '@clerk/clerk-react';
-import { Upload, X, Loader2 } from 'lucide-react';
+import { Upload, X, Loader2, Sparkles, Wand2, Lightbulb, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createListing, updateListing } from '../services/listingService';
+import { generateAIDescription } from '../services/aiService';
 import { fetchUserListings } from '../app/features/ListingSlice';
 
 /* ===================== CONSTANTS ===================== */
@@ -62,6 +63,11 @@ const ManageListing = () => {
   const [loadingListing, setLoadingListing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [showAIPromptBox, setShowAIPromptBox] = useState(false);
+  const MAX_PROMPT_CHARS = 250;
 
   const [formData, setFormData] = useState({
     title: '',
@@ -144,6 +150,57 @@ const ManageListing = () => {
     }));
   };
 
+  /* ===================== AI GENERATOR ===================== */
+  const handleGenerateDescription = async () => {
+    if (!formData.platform) {
+      toast.error('Please select a Platform first (YouTube, Instagram, etc.)');
+      return;
+    }
+    if (!formData.niche) {
+      toast.error('Please select a Niche first');
+      return;
+    }
+
+    try {
+      setIsGeneratingAI(true);
+      const token = await getToken();
+      const payload = {
+        title: formData.title,
+        platform: formData.platform,
+        username: formData.username,
+        niche: formData.niche,
+        followers_count: formData.followers_count,
+        engagement_rate: formData.engagement_rate,
+        monthly_views: formData.monthly_views,
+        monetized: formData.monetized,
+        verified: formData.verified,
+        country: formData.country,
+        age_range: formData.age_range,
+        customPrompt: customPrompt.trim(),
+      };
+
+      const res = await generateAIDescription(payload, token);
+      if (res?.description) {
+        setFormData((prev) => ({ ...prev, description: res.description }));
+        toast.success('AI description generated! Feel free to edit or refine.', { icon: '✨' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to generate AI description. Try again.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handlePromptPillClick = (text) => {
+    if (customPrompt.includes(text)) return;
+    const combined = customPrompt ? `${customPrompt.trim()}, ${text}` : text;
+    if (combined.length <= MAX_PROMPT_CHARS) {
+      setCustomPrompt(combined);
+    } else {
+      toast.error(`Custom prompt limit is ${MAX_PROMPT_CHARS} characters`);
+    }
+  };
+
   /* ===================== FORM VALIDATION ===================== */
   const validateForm = () => {
     if (!formData.title.trim()) {
@@ -220,14 +277,11 @@ const ManageListing = () => {
         age_range: formData.age_range,
         verified: formData.verified,
         monetized: formData.monetized,
+        images: (formData.images || []).filter((img) => typeof img === 'string'),
       };
 
       if (isEditing) {
         accountDetails.id = id;
-        // Include existing images that are strings (already uploaded)
-        accountDetails.images = formData.images.filter(
-          (img) => typeof img === 'string'
-        );
       }
 
       formDataToSend.append('accountDetails', JSON.stringify(accountDetails));
@@ -239,11 +293,10 @@ const ManageListing = () => {
       });
 
       // Call API
-      let response;
       if (isEditing) {
-        response = await updateListing(formDataToSend, token);
+        await updateListing(formDataToSend, token);
       } else {
-        response = await createListing(formDataToSend, token);
+        await createListing(formDataToSend, token);
       }
 
       toast.success(
@@ -477,18 +530,118 @@ const ManageListing = () => {
           </div>
         </section>
 
-        {/* DESCRIPTION */}
+        {/* DESCRIPTION & AI COPYWRITER */}
         <section className="bg-white border rounded-lg p-5">
-          <h3 className="font-medium mb-4">Description</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 className="font-medium text-gray-900">Description</h3>
+              <p className="text-xs text-gray-500">Provide an overview of your audience, reach, and transfer details.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAIPromptBox(!showAIPromptBox)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 border border-indigo-200 hover:from-indigo-100 hover:to-purple-100 transition shadow-2xs cursor-pointer w-fit"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              {showAIPromptBox ? 'Hide AI Assistant' : '✨ AI Copywriter Assistant'}
+            </button>
+          </div>
+
+          {/* AI PROMPT BUILDER CARD */}
+          {showAIPromptBox && (
+            <div className="bg-gradient-to-br from-indigo-50/70 via-purple-50/30 to-white border border-indigo-100 rounded-xl p-4 mb-4 shadow-2xs">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-indigo-600 text-white rounded-lg">
+                  <Wand2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">AI Sales Pitch Generator</h4>
+                  <p className="text-xs text-gray-500">Tailored using your platform, follower count, and custom focus points.</p>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-700">
+                    Custom Focus / Selling Points <span className="text-gray-400">(Optional)</span>
+                  </label>
+                  <span
+                    className={`text-[11px] font-mono ${
+                      customPrompt.length >= MAX_PROMPT_CHARS ? 'text-red-600 font-bold' : 'text-gray-500'
+                    }`}
+                  >
+                    {customPrompt.length} / {MAX_PROMPT_CHARS} chars
+                  </span>
+                </div>
+
+                <input
+                  type="text"
+                  value={customPrompt}
+                  maxLength={MAX_PROMPT_CHARS}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="e.g., Highlight active youth audience, clean strike history, and high sponsorship value"
+                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800"
+                />
+
+                {/* QUICK SUGGESTIONS PILLS */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                    <Lightbulb className="w-3 h-3 text-amber-500" /> Ideas:
+                  </span>
+                  {[
+                    'High Sponsorship Potential',
+                    'Organic Indian Audience',
+                    'Monetization Ready',
+                    'Clean Copyright History',
+                    'High Engagement & Viral Reels',
+                  ].map((pill) => (
+                    <button
+                      key={pill}
+                      type="button"
+                      onClick={() => handlePromptPillClick(pill)}
+                      className="text-[11px] bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full transition cursor-pointer"
+                    >
+                      + {pill}
+                    </button>
+                  ))}
+                </div>
+
+                {/* GENERATE ACTION BUTTON */}
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleGenerateDescription}
+                    disabled={isGeneratingAI}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                  >
+                    {isGeneratingAI ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Generating Sales Pitch...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Generate with AI
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <textarea
             name="description"
             value={formData.description}
             onChange={handleChange}
-            placeholder="Describe your account, audience, content type, etc."
-            rows="4"
-            className="input"
+            placeholder="Describe your account, audience demographics, growth history, and any included bonuses..."
+            rows="6"
+            className="input w-full"
           />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Tip: A detailed, transparent description helps accounts sell 3x faster with fewer buyer questions.
+          </p>
         </section>
 
         {/* VERIFICATION STATUS */}

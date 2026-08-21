@@ -349,12 +349,15 @@ export const updateListing = async (req, res) => {
       images = await Promise.all(uploadImages);
     }
 
+    const finalImages = [...existingImages, ...images];
+    // Exclude id, images, owner, and relations from update data to prevent Prisma schema errors
+    const { id: _, images: __, owner: ___, ownerId: ____, chats: _____, transactions: ______, createdAt: _______, updatedAt: ________, ...updateFields } = accountDetails;
+
     const updatedListing = await prisma.listing.update({
-      where: { id: accountDetails.id, ownerId: userId },
+      where: { id: listing.id },
       data: {
-        ownerId: userId,
-        ...accountDetails,
-        images: [...accountDetails.images, ...images],
+        ...updateFields,
+        images: finalImages.length > 0 ? finalImages : listing.images,
       },
     });
 

@@ -8,6 +8,7 @@ import listingRouter from "./Routes/listingRoutes.js";
 import chatRouter from "./Routes/chatRoutes.js";
 import adminRouter from "./Routes/adminRoutes.js";
 import paymentRouter from "./Routes/paymentRoutes.js";
+import aiRouter from "./Routes/aiRoutes.js";
 import { attachChatSocketServer } from "./config/chatSocket.js";
 const app = express(); // create the exprress  app
 
@@ -42,6 +43,7 @@ app.use("/api/listings", listingRouter);
 app.use("/api/chats", chatRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/payments", paymentRouter);
+app.use("/api/ai", aiRouter);
 
 const server = http.createServer(app);
 attachChatSocketServer(server);

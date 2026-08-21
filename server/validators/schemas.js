@@ -91,6 +91,7 @@ export const listingDetailsSchema = z.object({
     .transform(sanitizeText),
   verified: z.coerce.boolean().optional().default(false),
   monetized: z.coerce.boolean().optional().default(false),
+  images: z.array(z.string()).optional().default([]),
   id: z.string().optional(),
 });
 
