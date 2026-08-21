@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeftIcon,
   FilterIcon,
@@ -9,20 +9,25 @@ import {
   ChevronRight,
   SlidersHorizontal,
   RefreshCw,
+  Search,
+  X,
 } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import ListingCard from '../components/ListingCard';
 import FilterSidebar from '../components/FilterSidebar';
 import { fetchPublicListings } from '../app/features/ListingSlice';
+import { parseNaturalLanguageSearch } from '../services/aiService';
 
 const Marketplace = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [showFilterPhone, setShowFilterPhone] = useState(false);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
+  const initialAISearch = searchParams.get('aiSearch') || '';
 
   // Filter & Search State
   const [filters, setFilters] = useState({
@@ -35,6 +40,12 @@ const Marketplace = () => {
     monetized: false,
   });
 
+  // AI Smart Search State
+  const [aiQuery, setAiQuery] = useState(initialAISearch);
+  const [isSearchingAI, setIsSearchingAI] = useState(false);
+  const [aiFilterSummary, setAiFilterSummary] = useState('');
+  const hasTriggeredInitialAISearch = useRef(false);
+
   // Sorting & Pagination State
   const [sortBy, setSortBy] = useState('newest');
   const [page, setPage] = useState(1);
@@ -44,6 +55,71 @@ const Marketplace = () => {
   const { listings = [], pagination = {}, loading, error } = useSelector(
     (state) => state.listing
   );
+
+  // Natural Language Search Handler
+  const handleAISearch = async (queryText) => {
+    const q = (queryText || aiQuery || '').trim();
+    if (!q) {
+      toast.error('Please enter a search query (e.g. monetized tech youtube under 50k)');
+      return;
+    }
+
+    try {
+      setIsSearchingAI(true);
+      const res = await parseNaturalLanguageSearch(q);
+
+      if (res?.parsed) {
+        const p = res.parsed;
+        const newFilters = {
+          search: p.search || '',
+          platform: Array.isArray(p.platform) ? p.platform : [],
+          maxPrice: typeof p.maxPrice === 'number' ? p.maxPrice : 100000,
+          minFollowers: typeof p.minFollowers === 'number' ? p.minFollowers : 0,
+          niche: p.niche || '',
+          verified: Boolean(p.verified),
+          monetized: Boolean(p.monetized),
+        };
+
+        setFilters(newFilters);
+        setAiFilterSummary(p.summary || `Filters applied for "${q}"`);
+        setPage(1);
+        toast.success(`✨ AI Filters Applied: ${p.summary || 'Custom filters'}`, { icon: '🤖' });
+      }
+    } catch {
+      toast.error('Failed to parse search with AI. Trying keyword search.');
+      setFilters((prev) => ({ ...prev, search: q }));
+    } finally {
+      setIsSearchingAI(false);
+    }
+  };
+
+  const handleClearAISearch = () => {
+    setAiQuery('');
+    setAiFilterSummary('');
+    setFilters({
+      search: '',
+      platform: [],
+      maxPrice: 100000,
+      minFollowers: 0,
+      niche: '',
+      verified: false,
+      monetized: false,
+    });
+    setPage(1);
+    const params = new URLSearchParams(searchParams);
+    params.delete('aiSearch');
+    params.delete('search');
+    setSearchParams(params, { replace: true });
+    toast('Filters reset to default', { icon: '🔄' });
+  };
+
+  // Trigger initial AI search if arrived via ?aiSearch=...
+  useEffect(() => {
+    if (initialAISearch && !hasTriggeredInitialAISearch.current) {
+      hasTriggeredInitialAISearch.current = true;
+      handleAISearch(initialAISearch);
+    }
+  }, [initialAISearch]);
 
   // Fetch listings from backend whenever filters, sort, or page changes
   useEffect(() => {
@@ -137,17 +213,79 @@ const Marketplace = () => {
 
           {/* LISTINGS & TOP SORT BAR */}
           <div className="flex-1 flex flex-col min-w-0">
+            {/* TOP SEARCH BAR */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!aiQuery.trim()) {
+                  handleClearAISearch();
+                  return;
+                }
+                handleAISearch(aiQuery);
+              }}
+              className="mb-6"
+            >
+              <div className="relative flex items-center bg-white border border-gray-200 hover:border-indigo-400 focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-100 rounded-2xl shadow-xs transition p-1.5">
+                <Search className="size-4 text-gray-400 ml-3 mr-2 shrink-0" />
+                <input
+                  type="text"
+                  value={aiQuery}
+                  onChange={(e) => setAiQuery(e.target.value)}
+                  placeholder="Search listings by title, platform, niche, budget (e.g. monetized tech youtube under 50k)..."
+                  className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none pr-3"
+                />
+                {aiQuery && (
+                  <button
+                    type="button"
+                    onClick={handleClearAISearch}
+                    className="p-1 text-gray-400 hover:text-gray-600 mr-2 rounded-full cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSearchingAI}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold px-5 py-2.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  {isSearchingAI ? (
+                    <>
+                      <Loader2Icon className="size-4 animate-spin" />
+                      <span>Searching...</span>
+                    </>
+                  ) : (
+                    'Search'
+                  )}
+                </button>
+              </div>
+            </form>
+
             {/* RESULTS HEADER & SORT DROPDOWN */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-6 border-b border-gray-100 mb-6">
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
                   {filters.search ? `Search results for "${filters.search}"` : 'Marketplace Listings'}
                 </h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {totalCount > 0
-                    ? `Showing ${startItem}–${endItem} of ${totalCount} verified accounts`
-                    : '0 accounts found'}
-                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <p className="text-xs text-gray-500">
+                    {totalCount > 0
+                      ? `Showing ${startItem}–${endItem} of ${totalCount} verified accounts`
+                      : '0 accounts found'}
+                  </p>
+                  {aiFilterSummary && (
+                    <div className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-0.5 rounded-full text-xs">
+                      <span>{aiFilterSummary}</span>
+                      <button
+                        onClick={handleClearAISearch}
+                        className="text-indigo-400 hover:text-indigo-700 font-bold ml-1 text-sm leading-none"
+                        title="Clear filter"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* SORTING SELECTOR */}

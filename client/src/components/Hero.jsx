@@ -93,22 +93,28 @@ function Hero() {
 
         {/* Search Box */}
         <form
-          onSubmit={onSubmitHandler}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!input.trim()) return;
+            navigate(`/marketplace?search=${encodeURIComponent(input.trim())}`);
+          }}
           className="w-full flex justify-center group"
         >
-          <label className="border border-gray-400 rounded-md p-1 flex items-center w-full max-w-md">
+          <div className="border border-gray-300 hover:border-indigo-400 bg-white/95 backdrop-blur rounded-2xl p-1.5 flex items-center w-full max-w-xl shadow-md transition-all focus-within:ring-2 focus-within:ring-indigo-500">
             <input
               onChange={(e) => setInput(e.target.value)}
               value={input}
               type="text"
-              placeholder="Instagram Account"
-              className="pl-2 flex-1 outline-none"
+              placeholder="Search by platform, niche, budget (e.g. monetized tech youtube under 50k)..."
+              className="pl-4 flex-1 outline-none text-xs sm:text-sm text-gray-800 bg-transparent"
             />
-            <button className="bg-indigo-600 text-white p-3 px-6 rounded-md cursor-pointer">
-              {' '}
-              Search{' '}
+            <button
+              type="submit"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-6 rounded-xl font-semibold text-xs sm:text-sm cursor-pointer transition shadow-xs"
+            >
+              Search
             </button>
-          </label>
+          </div>
         </form>
       </div>
     </>

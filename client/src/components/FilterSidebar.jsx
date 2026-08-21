@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { X, Search, ChevronDown } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import { parseNaturalLanguageSearch } from "../services/aiService";
 
 /* -------------------------------
    CONSTANTS
@@ -81,11 +82,11 @@ const FilterSidebar = ({ showFilterPhone, setShowFilterPhone ,filters, setFilter
 
   useEffect(() => {
     const urlSearch = searchParams.get("search") || "";
-    setSearchInput(urlSearch);
-    if (filters.search !== urlSearch) {
-      setFilters((prev) => ({ ...prev, search: urlSearch }));
+    if (urlSearch !== searchInput) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearchInput(urlSearch);
     }
-  }, [searchParams]);
+  }, [searchParams, searchInput]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -103,6 +104,39 @@ const FilterSidebar = ({ showFilterPhone, setShowFilterPhone ,filters, setFilter
 
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  const handleSearchKeyDown = async (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const q = searchInput.trim();
+      if (!q) return;
+
+      // Check if the query looks conversational (multiple words or filter keywords)
+      const hasKeywords = /(under|below|above|more than|less than|monetiz|verifi|youtube|insta|tiktok|facebook|twitter|gaming|tech|fitness|lifestyle|k\b)/i.test(q);
+
+      if (hasKeywords) {
+        try {
+          const res = await parseNaturalLanguageSearch(q);
+          if (res?.parsed) {
+            const p = res.parsed;
+            onFiltersChange({
+              search: p.search || "",
+              platform: Array.isArray(p.platform) && p.platform.length > 0 ? p.platform : filters.platform,
+              niche: p.niche || filters.niche,
+              maxPrice: typeof p.maxPrice === "number" && p.maxPrice < 100000 ? p.maxPrice : filters.maxPrice,
+              minFollowers: typeof p.minFollowers === "number" && p.minFollowers > 0 ? p.minFollowers : filters.minFollowers,
+              verified: p.verified !== undefined ? p.verified : filters.verified,
+              monetized: p.monetized !== undefined ? p.monetized : filters.monetized,
+            });
+            return;
+          }
+        } catch {
+          // fallback to regular search
+        }
+      }
+      onFiltersChange({ ...filters, search: q });
+    }
+  };
 
   const onChangeSearch = (e) => {
     setSearchInput(e.target.value);
@@ -157,10 +191,11 @@ const FilterSidebar = ({ showFilterPhone, setShowFilterPhone ,filters, setFilter
           <Search className="absolute left-2 top-2.5 size-4 text-gray-400" />
           <input
             type="text"
-            value={filters.search}
+            value={searchInput}
             onChange={onChangeSearch}
-            placeholder="Search listings..."
-            className="w-full border rounded pl-8 pr-2 py-2"
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search accounts or filters..."
+            className="w-full border rounded pl-8 pr-2 py-2 text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
 
