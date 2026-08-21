@@ -2,6 +2,7 @@ import prisma from "../config/prisma.js";
 import { broadcastChatMessage, createSocketTicket } from "../config/chatSocket.js";
 import { ensureUserExists } from "../utils/userHelper.js";
 import { sanitizeText } from "../utils/sanitizer.js";
+import { inspectMessage } from "../utils/scamShield.js";
 
 const chatInclude = {
   listing: true,
@@ -107,6 +108,16 @@ export const sendMessage = async (req, res) => {
 
     if (!chat) return res.status(404).json({ message: "Chat not found" });
     if (!messageText) return res.status(400).json({ message: "Message cannot be empty" });
+
+    // 🛡️ Security Shield: Analyze for scam, off-platform payment evasion, or phone/contact harvesting
+    const shieldResult = await inspectMessage(rawMessage);
+    if (!shieldResult.allowed) {
+      return res.status(400).json({
+        message: shieldResult.reason || "Message blocked by Socialy Scam Shield to protect your escrow trade.",
+        isShieldBlocked: true,
+        flag: shieldResult.flag,
+      });
+    }
 
     const message = await prisma.message.create({
       data: { chatId: chat.id, sender_id: userId, message: messageText },

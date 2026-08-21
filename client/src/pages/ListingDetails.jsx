@@ -480,36 +480,35 @@ const ListingDetails = () => {
               </div>
             </div>
 
-            {/* Chat button (if not owner) */}
-            {!isOwner && (
-              <button
-                onClick={loadchat}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2.5 rounded-xl transition cursor-pointer mb-3"
-              >
-                <MessageSquare className="w-4 h-4" />
-                Chat with Seller
-              </button>
-            )}
-
-            {/* Smart Escrow Buy Action */}
-            {isAvailableForPurchase && (
+            {/* Primary Action Section (Buy Now or Chat) */}
+            {!isOwner && isAvailableForPurchase && (
               listing.isCredentialSubmitted ? (
-                <button
-                  onClick={() => setShowPurchaseConfirm(true)}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
-                >
-                  <ShoppingBag className="size-5" />
-                  Buy Now (Escrow)
-                </button>
-              ) : (
                 <div className="space-y-2.5">
-                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900">
-                    <div className="flex items-center gap-1.5 font-bold mb-1">
-                      <Lock size={14} className="text-amber-700" />
+                  <button
+                    onClick={() => setShowPurchaseConfirm(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    <ShoppingBag className="size-5" />
+                    Buy Now (Escrow)
+                  </button>
+
+                  <button
+                    onClick={loadchat}
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-2.5 rounded-xl transition cursor-pointer"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Chat with Seller
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-xs text-amber-900">
+                    <div className="flex items-center gap-1.5 font-bold mb-1 text-amber-900">
+                      <Lock size={14} className="text-amber-700 shrink-0" />
                       <span>Escrow Vault Pending</span>
                     </div>
                     <p className="text-amber-800 text-[11px] leading-relaxed">
-                      Seller has not deposited credentials into the escrow vault yet. Message the seller to request credential submission before purchasing.
+                      Seller has not deposited credentials into the encrypted vault yet. Message the seller to request credential submission to unlock instant checkout.
                     </p>
                   </div>
 
@@ -518,7 +517,7 @@ const ListingDetails = () => {
                     className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl transition shadow-xs cursor-pointer"
                   >
                     <MessageSquare className="size-4" />
-                    Chat to Request Escrow Lock
+                    Chat with Seller to Request Deposit
                   </button>
                 </div>
               )
