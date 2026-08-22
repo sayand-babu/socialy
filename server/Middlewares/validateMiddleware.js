@@ -33,20 +33,20 @@ export const validateBody = (schema) => (req, res, next) => {
  */
 export const validateMultipartJson = (schema, fieldName = "accountDetails") => (req, res, next) => {
   try {
-    if (!req.body || !req.body[fieldName]) {
+    let target = req.body?.[fieldName] || req.body;
+    if (!target || (typeof target === "object" && Object.keys(target).length === 0)) {
       return res.status(400).json({ message: `Missing required field: ${fieldName}` });
     }
 
-    let parsedJson = req.body[fieldName];
-    if (typeof parsedJson === "string") {
+    if (typeof target === "string") {
       try {
-        parsedJson = JSON.parse(parsedJson);
+        target = JSON.parse(target);
       } catch {
         return res.status(400).json({ message: `Invalid JSON format in ${fieldName}` });
       }
     }
 
-    const validated = schema.parse(parsedJson);
+    const validated = schema.parse(target);
     req.validatedData = validated;
     return next();
   } catch (error) {

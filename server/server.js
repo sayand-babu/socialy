@@ -9,6 +9,7 @@ import chatRouter from "./Routes/chatRoutes.js";
 import adminRouter from "./Routes/adminRoutes.js";
 import paymentRouter from "./Routes/paymentRoutes.js";
 import aiRouter from "./Routes/aiRoutes.js";
+import uploadRouter from "./Routes/uploadRoutes.js";
 import { attachChatSocketServer } from "./config/chatSocket.js";
 const app = express(); // create the exprress  app
 
@@ -40,6 +41,7 @@ app.get("/", (req, res) => res.send("server is alive"));
 app.use("/api/inngest/", serve({ client: inngest, functions }));
 
 app.use("/api/listings", listingRouter);
+app.use("/api/upload", uploadRouter);
 app.use("/api/chats", chatRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/payments", paymentRouter);
