@@ -59,15 +59,16 @@ export const getUserListings = async (token) => {
 
 /**
  * Create a new listing
- * @param {FormData} formData - Form data containing listing details and images
+ * @param {FormData|Object} payload - Form data or JSON payload containing listing details and image URLs
  * @param {string} token - Clerk auth token
  * @returns {Promise<Object>} Created listing object
  */
-export const createListing = async (formData, token) => {
+export const createListing = async (payload, token) => {
   try {
-    const response = await api.post('/listings', formData, {
+    const isFormData = payload instanceof FormData;
+    const response = await api.post('/listings', payload, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
@@ -80,15 +81,16 @@ export const createListing = async (formData, token) => {
 
 /**
  * Update an existing listing
- * @param {FormData} formData - Form data containing updated listing details
+ * @param {FormData|Object} payload - Form data or JSON payload containing updated listing details
  * @param {string} token - Clerk auth token
  * @returns {Promise<Object>} Updated listing object
  */
-export const updateListing = async (formData, token) => {
+export const updateListing = async (payload, token) => {
   try {
-    const response = await api.put('/listings', formData, {
+    const isFormData = payload instanceof FormData;
+    const response = await api.put('/listings', payload, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
@@ -200,17 +202,104 @@ export const submitWithdrawal = async (withdrawalData, token) => {
 };
 
 /**
- * Purchase an account through escrow
+ * Confirm working account credentials and release escrow payout to seller
+ * @param {string} transactionId - Transaction ID
+ * @param {string} token - Clerk auth token
+ * @returns {Promise<Object>} Response object
+ */
+export const confirmEscrowRelease = async (transactionId, token) => {
+  try {
+    const response = await api.post(
+      `/listings/transactions/${transactionId}/confirm`,
+      {},
+      authHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error confirming escrow release:', error);
+    throw error;
+  }
+};
+
+/**
+ * Raise an escrow dispute for an order
+ * @param {string} transactionId - Transaction ID
+ * @param {Object} payload - { reason, proof }
+ * @param {string} token - Clerk auth token
+ * @returns {Promise<Object>} Response object
+ */
+export const raiseEscrowDispute = async (transactionId, payload, token) => {
+  try {
+    const response = await api.post(
+      `/listings/transactions/${transactionId}/dispute`,
+      payload,
+      authHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error raising escrow dispute:', error);
+    throw error;
+  }
+};
+
+/**
+ * Seller confirms account handover checklist
  * @param {string} listingId - Listing ID
  * @param {string} token - Clerk auth token
  * @returns {Promise<Object>} Response object
  */
-export const purchaseListing = async (listingId, token) => {
+export const confirmHandover = async (listingId, token) => {
   try {
-    const response = await api.post(`/listings/${listingId}/purchase`, {}, authHeaders(token));
+    const response = await api.post(
+      `/listings/${listingId}/confirm-handover`,
+      {},
+      authHeaders(token)
+    );
     return response.data;
   } catch (error) {
-    console.error('Error purchasing listing:', error);
+    console.error('Error confirming handover:', error);
+    throw error;
+  }
+};
+
+/**
+ * Seller submits counter-evidence / statement for an open dispute
+ * @param {string} transactionId - Transaction ID
+ * @param {Object} payload - { response }
+ * @param {string} token - Clerk auth token
+ * @returns {Promise<Object>} Response object
+ */
+export const submitSellerDisputeResponse = async (transactionId, payload, token) => {
+  try {
+    const response = await api.post(
+      `/listings/transactions/${transactionId}/seller-response`,
+      payload,
+      authHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting seller dispute response:', error);
+    throw error;
+  }
+};
+
+/**
+ * Buyer submits single-shot 24h appeal on rejected dispute
+ * @param {string} transactionId - Transaction ID
+ * @param {Object} payload - { appealReason, appealEvidence }
+ * @param {string} token - Clerk auth token
+ * @returns {Promise<Object>} Response object
+ */
+export const appealDispute = async (transactionId, payload, token) => {
+  try {
+    const response = await api.post(
+      `/listings/transactions/${transactionId}/appeal`,
+      payload,
+      authHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting dispute appeal:', error);
     throw error;
   }
 };
