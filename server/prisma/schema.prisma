@@ -7,14 +7,17 @@ datasource db {
 }
 
 model User {
-    id        String   @id
-    email     String
-    name      String
-    image     String
-    earned    Float    @default(0)
-    withdrawn Float    @default(0)
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    id            String   @id
+    email         String
+    name          String
+    image         String
+    earned        Float    @default(0)
+    escrowBalance Float    @default(0)
+    withdrawn     Float    @default(0)
+    faultCount    Int      @default(0)
+    trustState    String   @default("OK")
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
 
     // Relations
     Listing       Listing[]
@@ -62,6 +65,15 @@ enum Status {
     sold
     deleted
     inactive
+    faulty_resubmit_allowed
+    delisted
+}
+
+enum EscrowStatus {
+    UNDER_INSPECTION
+    COMPLETED
+    DISPUTED
+    REFUNDED
 }
 
 model Listing {
@@ -89,6 +101,10 @@ model Listing {
     isCredentialSubmitted Boolean  @default(false)
     isCredentialVerified  Boolean  @default(false)
     isCredentialChanged   Boolean  @default(false)
+    isHandoverConfirmed   Boolean  @default(false)
+    handoverConfirmedAt   DateTime?
+    verificationStatus    String   @default("UNVERIFIED_LIVE")
+    resubmitCount         Int      @default(0)
 
     // Relations
     owner        User          @relation(fields: [ownerId], references: [id])
@@ -151,13 +167,32 @@ model Credential {
 }
 
 model Transaction {
-    id        String   @id @default(uuid())
-    listingId String
-    ownerId   String
-    userId    String
-    amount    Float
-    isPaid    Boolean  @default(false)
-    createdAt DateTime @default(now())
+    id                String       @id @default(uuid())
+    listingId         String
+    ownerId           String
+    userId            String
+    amount            Float
+    platformFee       Float        @default(0)
+    sellerPayout      Float        @default(0)
+    isPaid            Boolean      @default(false)
+    escrowStatus      EscrowStatus @default(UNDER_INSPECTION)
+    inspectionEndsAt  DateTime?
+    razorpayOrderId   String?
+    razorpayPaymentId String?
+    razorpayRefundId  String?
+    refundStatus      String?
+    disputeReason     String?
+    disputeProof      String?
+    disputeStatus     String?
+    sellerRespondBy   DateTime?
+    sellerResponse    String?
+    sellerRespondedAt DateTime?
+    isAppealed        Boolean      @default(false)
+    appealReason      String?
+    appealEvidence    String?
+    appealCreatedAt   DateTime?
+    resolvedAt        DateTime?
+    createdAt         DateTime     @default(now())
 
     // Relations
     listing Listing @relation(fields: [listingId], references: [id])
