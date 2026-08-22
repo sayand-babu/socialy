@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { encryptData, decryptData } from "../utils/encryption.js";
-import { getCache, setCache, delCache } from "../config/redis.js";
+import { getCache, setCache, delCache, delCachePattern } from "../config/redis.js";
+import { getRazorpayInstance } from "../config/razorpay.js";
 
 // Helper to decrypt list of credential items
 const decryptCredentialsList = (list) =>
@@ -109,20 +110,146 @@ export const verifyCredential = async (req, res) => {
     const listing = await prisma.listing.update({
       where: { id: listingId },
       data: {
+        status: "active",
         isCredentialVerified: true,
         platformAssured: true,
+        verified: true,
+        verificationStatus: "VERIFIED",
       },
     });
 
     // Invalidate Redis caches
     await delCache(`listing:detail:${listingId}`, "admin:dashboard:stats", "listings:public");
+    await delCachePattern("listings:*");
 
     return res.json({
-      message: "Credentials verified successfully and listing marked as Platform Assured",
+      message: "Credentials verified successfully and listing marked as Platform Verified",
       listing,
     });
   } catch (error) {
     console.error("Verify credential error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Reject credentials during verification and report bug/issue to seller for resubmission
+ */
+export const rejectListingCredential = async (req, res) => {
+  try {
+    const { listingId, reason } = req.body;
+    if (!listingId) {
+      return res.status(400).json({ message: "Listing ID is required" });
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+    });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    if ((listing.resubmitCount || 0) >= 1) {
+      return res.status(400).json({
+        message:
+          "This listing has already used its single (1-time) credential resubmission allowance. You must Flag & Delist this listing.",
+      });
+    }
+
+    const updatedListing = await prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        status: "faulty_resubmit_allowed",
+        isCredentialVerified: false,
+        isCredentialSubmitted: false,
+        isHandoverConfirmed: false,
+        resubmitCount: { increment: 1 },
+      },
+    });
+
+    await delCache(`listing:detail:${listingId}`, "admin:dashboard:stats", "listings:public");
+    await delCachePattern("listings:*");
+
+    return res.json({
+      success: true,
+      message: "Credential issue reported to seller. The listing is set to faulty_resubmit_allowed for correction.",
+      listing: updatedListing,
+    });
+  } catch (error) {
+    console.error("Reject credential error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Flag fraudulent listing / fake metrics and penalize seller
+ */
+export const flagListingFraud = async (req, res) => {
+  try {
+    const { listingId, reason } = req.body;
+    if (!listingId) {
+      return res.status(400).json({ message: "Listing ID is required" });
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+    });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    const seller = await prisma.user.findUnique({
+      where: { id: listing.ownerId },
+    });
+
+    const newFaultCount = (seller?.faultCount || 0) + 1;
+    const newTrustState = newFaultCount >= 3 ? "BANNED" : newFaultCount === 2 ? "FLAGGED" : "OK";
+
+    const dbOps = [
+      prisma.listing.update({
+        where: { id: listingId },
+        data: {
+          status: "delisted",
+          isCredentialVerified: false,
+        },
+      }),
+      prisma.user.update({
+        where: { id: listing.ownerId },
+        data: {
+          faultCount: newFaultCount,
+          trustState: newTrustState,
+        },
+      }),
+    ];
+
+    if (newTrustState === "BANNED") {
+      dbOps.push(
+        prisma.listing.updateMany({
+          where: {
+            ownerId: listing.ownerId,
+            id: { not: listingId },
+            status: "active",
+          },
+          data: { status: "delisted" },
+        })
+      );
+    }
+
+    await prisma.$transaction(dbOps);
+
+    await delCache(`listing:detail:${listingId}`, "admin:dashboard:stats", "listings:public");
+    await delCachePattern("listings:*");
+
+    return res.json({
+      success: true,
+      message: `Listing permanently delisted. Seller strike recorded (Faults: ${newFaultCount}, Trust: ${newTrustState}).`,
+      sellerFaultCount: newFaultCount,
+      sellerTrustState: newTrustState,
+    });
+  } catch (error) {
+    console.error("Flag listing error:", error);
     res.status(500).json({ message: error.code || error.message });
   }
 };
@@ -334,6 +461,230 @@ export const approveWithdrawal = async (req, res) => {
     });
   } catch (error) {
     console.error("Approve withdrawal error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Get all active and historical escrow disputes
+ */
+export const getAllAdminDisputes = async (req, res) => {
+  try {
+    const disputes = await prisma.transaction.findMany({
+      where: {
+        escrowStatus: {
+          in: ["DISPUTED", "REFUNDED", "COMPLETED"],
+        },
+        disputeReason: {
+          not: null,
+        },
+      },
+      include: {
+        listing: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const userIds = [
+      ...new Set([
+        ...disputes.map((d) => d.userId),
+        ...disputes.map((d) => d.ownerId),
+      ]),
+    ];
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+    });
+
+    const disputesWithUsers = disputes.map((d) => ({
+      ...d,
+      buyer: users.find((u) => u.id === d.userId) || null,
+      seller: users.find((u) => u.id === d.ownerId) || null,
+    }));
+
+    return res.json({ disputes: disputesWithUsers });
+  } catch (error) {
+    console.error("Get all admin disputes error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Resolve an escrow dispute (release to seller OR refund buyer)
+ */
+export const resolveDispute = async (req, res) => {
+  try {
+    const { id } = req.params; // Transaction ID
+    const { decision } = req.body; // "RELEASE_TO_SELLER" | "REFUND_BUYER"
+
+    if (!["RELEASE_TO_SELLER", "REFUND_BUYER"].includes(decision)) {
+      return res.status(400).json({
+        message: "Invalid decision. Must be RELEASE_TO_SELLER or REFUND_BUYER",
+      });
+    }
+
+    const transaction = await prisma.transaction.findUnique({
+      where: { id },
+      include: { listing: true },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    if (transaction.escrowStatus !== "DISPUTED") {
+      return res.status(400).json({
+        message: `Dispute is already resolved or in status: ${transaction.escrowStatus}`,
+      });
+    }
+
+    const sellerPayout = transaction.sellerPayout || (transaction.amount * 0.95);
+
+    if (decision === "RELEASE_TO_SELLER") {
+      // v3 Decision: Dispute Rejected -> Release funds to seller
+      const finalDisputeStatus = transaction.isAppealed ? "CLOSED" : "REJECTED";
+
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id },
+          data: {
+            escrowStatus: "COMPLETED",
+            disputeStatus: finalDisputeStatus,
+            resolvedAt: new Date(),
+          },
+        }),
+        prisma.user.update({
+          where: { id: transaction.ownerId },
+          data: {
+            escrowBalance: { decrement: sellerPayout },
+            earned: { increment: sellerPayout },
+          },
+        }),
+      ]);
+
+      await delCache("admin:dashboard:stats");
+      await delCachePattern("listings:*");
+
+      return res.json({
+        success: true,
+        message: `Dispute decision: REJECTED (Escrow funds of ₹${sellerPayout.toLocaleString()} released to Seller).`,
+        disputeStatus: finalDisputeStatus,
+      });
+    } else {
+      // REFUND_BUYER: Dispute Upheld -> Issue automated Razorpay refund & apply strike engine
+      if (!transaction.razorpayPaymentId) {
+        return res.status(400).json({
+          message:
+            "Cannot process automated refund: No Razorpay payment ID found on this transaction record.",
+        });
+      }
+
+      // Step 1: Calculate seller strike & trust progression
+      const seller = await prisma.user.findUnique({
+        where: { id: transaction.ownerId },
+      });
+
+      const currentFaultCount = seller?.faultCount || 0;
+      const newFaultCount = currentFaultCount + 1;
+      const newTrustState = newFaultCount >= 3 ? "BANNED" : newFaultCount === 2 ? "FLAGGED" : "OK";
+
+      // Step 2: Determine listing post-dispute disposition
+      const isMetricsDispute =
+        transaction.disputeReason?.toUpperCase().includes("METRIC") ||
+        transaction.disputeReason?.toUpperCase().includes("FOLLOWER") ||
+        transaction.disputeReason?.toUpperCase().includes("ENGAGEMENT");
+
+      // Metrics misrepresentation -> DELISTED permanently. Credential issues -> faulty_resubmit_allowed
+      const targetListingStatus = isMetricsDispute ? "delisted" : "faulty_resubmit_allowed";
+
+      let razorpayRefund;
+      try {
+        const razorpay = getRazorpayInstance();
+        // Amount must be passed in paise (integer)
+        const refundAmountPaise = Math.round(Number(transaction.amount) * 100);
+
+        razorpayRefund = await razorpay.payments.refund(transaction.razorpayPaymentId, {
+          amount: refundAmountPaise,
+          speed: "normal",
+          notes: {
+            reason: transaction.disputeReason || "Admin dispute resolution refund",
+            transactionId: transaction.id,
+            listingId: transaction.listingId,
+          },
+        });
+      } catch (razorpayErr) {
+        console.error("Razorpay Refund API Execution Error:", razorpayErr);
+        const errDesc =
+          razorpayErr?.error?.description ||
+          razorpayErr?.message ||
+          "Payment gateway rejected the refund request.";
+        return res.status(502).json({
+          message: `Razorpay refund failed: ${errDesc}. The dispute remains OPEN so you can investigate or retry.`,
+        });
+      }
+
+      // Step 3: Atomic database update with strike engine & listing disposition
+      const dbOperations = [
+        prisma.transaction.update({
+          where: { id },
+          data: {
+            escrowStatus: "REFUNDED",
+            disputeStatus: "UPHELD",
+            resolvedAt: new Date(),
+            razorpayRefundId: razorpayRefund?.id || null,
+            refundStatus: razorpayRefund?.status || "processed",
+          },
+        }),
+        prisma.user.update({
+          where: { id: transaction.ownerId },
+          data: {
+            escrowBalance: { decrement: sellerPayout },
+            faultCount: newFaultCount,
+            trustState: newTrustState,
+          },
+        }),
+        prisma.listing.update({
+          where: { id: transaction.listingId },
+          data: {
+            status: targetListingStatus,
+            ...(targetListingStatus === "faulty_resubmit_allowed" && {
+              resubmitCount: { increment: 1 },
+            }),
+          },
+        }),
+      ];
+
+      // If seller reached BANNED status (>= 3 faults), pull all their active listings
+      if (newTrustState === "BANNED") {
+        dbOperations.push(
+          prisma.listing.updateMany({
+            where: {
+              ownerId: transaction.ownerId,
+              id: { not: transaction.listingId },
+              status: "active",
+            },
+            data: { status: "delisted" },
+          })
+        );
+      }
+
+      await prisma.$transaction(dbOperations);
+
+      await delCache("admin:dashboard:stats");
+      await delCachePattern("listings:*");
+
+      return res.json({
+        success: true,
+        message: `Dispute UPHELD: Full refund of ₹${transaction.amount.toLocaleString()} dispatched to buyer via Razorpay (Refund ID: ${razorpayRefund.id}). Seller fault count updated to ${newFaultCount} (Trust: ${newTrustState}). Listing status set to ${targetListingStatus}.`,
+        refundId: razorpayRefund.id,
+        refundStatus: razorpayRefund.status,
+        sellerFaultCount: newFaultCount,
+        sellerTrustState: newTrustState,
+        listingStatus: targetListingStatus,
+      });
+    }
+  } catch (error) {
+    console.error("Resolve Dispute Error:", error);
     res.status(500).json({ message: error.code || error.message });
   }
 };

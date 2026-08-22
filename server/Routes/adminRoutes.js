@@ -3,6 +3,8 @@ import {
   getAdminDashboard,
   getUnverifiedCredentials,
   verifyCredential,
+  rejectListingCredential,
+  flagListingFraud,
   getPendingCredentialChanges,
   changeCredential,
   getAllAdminListings,
@@ -10,6 +12,8 @@ import {
   getAllAdminTransactions,
   getAllAdminWithdrawals,
   approveWithdrawal,
+  getAllAdminDisputes,
+  resolveDispute,
 } from "../Controllers/adminController.js";
 import { requireAdmin } from "../Middlewares/authMiddleware.js";
 
@@ -24,6 +28,8 @@ adminRouter.get("/dashboard", requireAdmin, getAdminDashboard);
 
 adminRouter.get("/credentials/unverified", requireAdmin, getUnverifiedCredentials);
 adminRouter.post("/credentials/verify", requireAdmin, verifyCredential);
+adminRouter.post("/credentials/reject", requireAdmin, rejectListingCredential);
+adminRouter.post("/credentials/flag", requireAdmin, flagListingFraud);
 
 adminRouter.get("/credentials/change", requireAdmin, getPendingCredentialChanges);
 adminRouter.post("/credentials/change", requireAdmin, changeCredential);
@@ -35,5 +41,8 @@ adminRouter.get("/transactions", requireAdmin, getAllAdminTransactions);
 
 adminRouter.get("/withdrawals", requireAdmin, getAllAdminWithdrawals);
 adminRouter.put("/withdrawals/:id/approve", requireAdmin, approveWithdrawal);
+
+adminRouter.get("/disputes", requireAdmin, getAllAdminDisputes);
+adminRouter.post("/disputes/:id/resolve", requireAdmin, resolveDispute);
 
 export default adminRouter;

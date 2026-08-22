@@ -9,7 +9,15 @@ import { getCache, setCache, delCache, delCachePattern } from "../config/redis.j
 export const addListing = async (req, res) => {
   try {
     const { userId } = await req.auth();
-    await ensureUserExists(userId);
+    const user = await ensureUserExists(userId);
+
+    // v3 Guard: Banned sellers cannot create listings
+    if (user?.trustState === "BANNED") {
+      return res.status(403).json({
+        message:
+          "Your account has been permanently banned from creating listings due to repeated dispute policy violations.",
+      });
+    }
 
     if (req.plan !== "premium") {
       const listingCount = await prisma.listing.count({
@@ -23,32 +31,55 @@ export const addListing = async (req, res) => {
       }
     }
 
-    const accountDetails = req.validatedData || JSON.parse(req.body.accountDetails);
+    let rawDetails = req.validatedData || req.body.accountDetails || req.body;
+    if (typeof rawDetails === "string") {
+      try {
+        rawDetails = JSON.parse(rawDetails);
+      } catch {
+        rawDetails = req.body;
+      }
+    }
+
+    const accountDetails = { ...rawDetails };
 
     accountDetails.followers_count = parseFloat(accountDetails.followers_count) || 0;
     accountDetails.engagement_rate = parseFloat(accountDetails.engagement_rate) || 0;
     accountDetails.monthly_views = parseFloat(accountDetails.monthly_views) || 0;
     accountDetails.price = parseFloat(accountDetails.price);
 
-    accountDetails.platform = accountDetails.platform.toLowerCase();
-    accountDetails.niche = accountDetails.niche.toLowerCase();
-    const uploadimages = (req.files || []).map(async (file) => {
-      const response = await imagekit.files.upload({
-        file: await toFile(file.buffer, file.originalname),
-        fileName: `${Date.now()}-${file.originalname}`,
-        folder: "/socialy",
-        transformation: { pre: "w-1280,h-auto" },
+    accountDetails.platform = (accountDetails.platform || "").toLowerCase();
+    accountDetails.niche = (accountDetails.niche || "").toLowerCase();
+
+    // Collect pre-uploaded image URLs (direct client upload)
+    const existingImages = Array.isArray(accountDetails.images)
+      ? accountDetails.images.filter((img) => typeof img === "string" && img.startsWith("http"))
+      : [];
+
+    // Process any legacy direct files if present
+    let uploadedImages = [];
+    if (req.files && req.files.length > 0) {
+      const uploadPromises = req.files.map(async (file) => {
+        const response = await imagekit.files.upload({
+          file: await toFile(file.buffer, file.originalname),
+          fileName: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_")}`,
+          folder: "/socialy",
+          transformation: { pre: "w-1280,h-auto" },
+        });
+        return response.url;
       });
-      return response.url;
-    });
-    // wait for all the images to be uploaded and get their urls
-    const images = await Promise.all(uploadimages);
+      uploadedImages = await Promise.all(uploadPromises);
+    }
+
+    const finalImages = [...existingImages, ...uploadedImages];
+
+    // Exclude id, relations, and timestamps from data
+    const { id: _, images: __, owner: ___, ownerId: ____, chats: _____, transactions: ______, createdAt: _______, updatedAt: ________, ...detailsToSave } = accountDetails;
 
     const listing = await prisma.listing.create({
       data: {
         ownerId: userId,
-        ...accountDetails,
-        images,
+        ...detailsToSave,
+        images: finalImages,
       },
     });
 
@@ -267,6 +298,11 @@ export const getAllUserListing = async (req, res) => {
         ownerId: userId,
         status: { not: "deleted" },
       },
+      include: {
+        transactions: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -275,9 +311,10 @@ export const getAllUserListing = async (req, res) => {
     });
 
     const balance = {
-      earned: user.earned,
-      withdrawn: user.withdrawn,
-      available: user.earned - user.withdrawn,
+      earned: user?.earned || 0,
+      escrowHold: user?.escrowBalance || 0,
+      withdrawn: user?.withdrawn || 0,
+      available: (user?.earned || 0) - (user?.withdrawn || 0),
     };
 
     if (!listings || listings.length === 0) {
@@ -500,6 +537,19 @@ export const addCredential = async (req, res) => {
       });
     }
 
+    // 🛡️ ESCROW LOCK: Prevent credential tampering after sale or after initial submission (unless faulty_resubmit_allowed)
+    if (listing.status === "sold") {
+      return res.status(400).json({
+        message: "Credentials cannot be modified after the listing has been sold. The escrow vault is locked.",
+      });
+    }
+
+    if (listing.isCredentialSubmitted && listing.status !== "faulty_resubmit_allowed") {
+      return res.status(400).json({
+        message: "Credentials have already been submitted and secured in the Escrow Vault. They cannot be edited.",
+      });
+    }
+
     // Encrypt sensitive credential values before storing
     const encryptedCredentials = credential.map((item) => ({
       id: item.id || `cred-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -527,13 +577,31 @@ export const addCredential = async (req, res) => {
       });
     }
 
+    const isResubmission =
+      listing.status === "faulty_resubmit_allowed" || (listing.resubmitCount || 0) >= 1;
+    const nextStatus = isResubmission ? "inactive" : listing.status;
+    const nextVerificationStatus = isResubmission
+      ? "PENDING_VERIFICATION"
+      : listing.verificationStatus;
+
     const updatedListing = await prisma.listing.update({
       where: { id: listingId },
-      data: { isCredentialSubmitted: true },
+      data: {
+        isCredentialSubmitted: true,
+        isCredentialVerified: false,
+        isHandoverConfirmed: true,
+        handoverConfirmedAt: new Date(),
+        status: nextStatus,
+        verificationStatus: nextVerificationStatus,
+        resubmitCount: isResubmission
+          ? Math.max(listing.resubmitCount || 0, 1)
+          : listing.resubmitCount || 0,
+      },
     });
 
     // Invalidate Redis caches
     await delCache(`listing:detail:${listingId}`, "admin:dashboard:stats");
+    await delCachePattern("listings:*");
 
     return res.json({
       message: "Credentials submitted securely for escrow verification",
@@ -611,128 +679,424 @@ export const withdrawAmount = async (req, res) => {
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const availableBalance = (user.earned || 0) - (user.withdrawn || 0);
-
-    if (numericAmount > availableBalance) {
-      return res.status(400).json({
-        message: `Insufficient balance. Available: $${availableBalance.toLocaleString()}`,
+    // 🛡️ ATOMIC CONCURRENCY TRANSACTION: Prevents parallel race condition overdrawing
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
       });
-    }
 
-    const withdrawal = await prisma.withdrawal.create({
-      data: {
-        userId,
-        amount: numericAmount,
-        account,
-      },
+      if (!user) {
+        throw new Error("USER_NOT_FOUND");
+      }
+
+      const availableBalance = (user.earned || 0) - (user.withdrawn || 0);
+
+      if (numericAmount > availableBalance) {
+        throw new Error(`INSUFFICIENT_BALANCE:${availableBalance}`);
+      }
+
+      const withdrawal = await tx.withdrawal.create({
+        data: {
+          userId,
+          amount: numericAmount,
+          account,
+        },
+      });
+
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          withdrawn: { increment: numericAmount },
+        },
+      });
+
+      return { withdrawal, updatedUser };
     });
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        withdrawn: (user.withdrawn || 0) + numericAmount,
-      },
-    });
+    await delCache("admin:dashboard:stats");
 
     return res.json({
       message: "Withdrawal request submitted successfully",
-      withdrawal,
+      withdrawal: result.withdrawal,
       balance: {
-        earned: updatedUser.earned,
-        withdrawn: updatedUser.withdrawn,
-        available: updatedUser.earned - updatedUser.withdrawn,
+        earned: result.updatedUser.earned,
+        escrowHold: result.updatedUser.escrowBalance || 0,
+        withdrawn: result.updatedUser.withdrawn,
+        available: result.updatedUser.earned - result.updatedUser.withdrawn,
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error("Withdrawal Error:", error);
+    if (error.message?.startsWith("INSUFFICIENT_BALANCE:")) {
+      const avail = Number(error.message.split(":")[1]);
+      return res.status(400).json({
+        message: `Insufficient balance. Available: ₹${avail.toLocaleString()}`,
+      });
+    }
+    if (error.message === "USER_NOT_FOUND") {
+      return res.status(404).json({ message: "User not found" });
+    }
     res.status(500).json({
       message: error.code || error.message,
     });
   }
 };
 
-export const purchaseListing = async (req, res) => {
+
+
+/**
+ * Auto-resolves expired 24h escrow inspection windows where no dispute was opened
+ */
+const autoReleaseExpiredEscrows = async () => {
+  try {
+    const expiredTransactions = await prisma.transaction.findMany({
+      where: {
+        isPaid: true,
+        escrowStatus: "UNDER_INSPECTION",
+        inspectionEndsAt: {
+          lte: new Date(),
+        },
+      },
+    });
+
+    for (const tx of expiredTransactions) {
+      const sellerPayout = tx.sellerPayout || (tx.amount * 0.95);
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: tx.id },
+          data: {
+            escrowStatus: "COMPLETED",
+            resolvedAt: new Date(),
+          },
+        }),
+        prisma.user.update({
+          where: { id: tx.ownerId },
+          data: {
+            escrowBalance: { decrement: sellerPayout },
+            earned: { increment: sellerPayout },
+          },
+        }),
+      ]);
+    }
+  } catch (err) {
+    console.error("Auto-release escrow error:", err);
+  }
+};
+
+/**
+ * Buyer manually confirms working account credentials and releases escrow payout to the seller
+ */
+export const confirmEscrowRelease = async (req, res) => {
   try {
     const { userId } = await req.auth();
-    const { id } = req.params;
+    const { id } = req.params; // Transaction ID
 
-    await ensureUserExists(userId);
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId, isPaid: true },
+      include: { listing: true },
+    });
 
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: { owner: true },
+    if (!transaction) {
+      return res.status(404).json({ message: "Order not found or unauthorized" });
+    }
+
+    if (transaction.escrowStatus !== "UNDER_INSPECTION") {
+      return res.status(400).json({
+        message: `Cannot release escrow. Order is already ${transaction.escrowStatus.toLowerCase().replace(/_/g, " ")}.`,
+      });
+    }
+
+    const sellerPayout = transaction.sellerPayout || (transaction.amount * 0.95);
+
+    // Atomically transfer funds from seller's escrowBalance to earned (withdrawable)
+    await prisma.$transaction([
+      prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          escrowStatus: "COMPLETED",
+          resolvedAt: new Date(),
+        },
+      }),
+      prisma.user.update({
+        where: { id: transaction.ownerId },
+        data: {
+          escrowBalance: { decrement: sellerPayout },
+          earned: { increment: sellerPayout },
+        },
+      }),
+    ]);
+
+    await delCache("admin:dashboard:stats");
+
+    return res.json({
+      success: true,
+      message: "Escrow funds released to seller successfully. Account ownership confirmed!",
+    });
+  } catch (error) {
+    console.error("Confirm Escrow Release Error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Buyer raises an escrow dispute before 24h inspection ends (freezes seller payout)
+ */
+export const raiseEscrowDispute = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    const { id } = req.params; // Transaction ID
+    const { reason, proof } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Please specify a reason for this dispute" });
+    }
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId, isPaid: true },
+      include: { listing: true },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Order not found or unauthorized" });
+    }
+
+    if (transaction.escrowStatus !== "UNDER_INSPECTION") {
+      return res.status(400).json({
+        message: `Cannot dispute order. Current status is ${transaction.escrowStatus.toLowerCase().replace(/_/g, " ")}.`,
+      });
+    }
+
+    // v3 Spec Rule: METRICS_MISMATCH is strictly forbidden on UNVERIFIED listings
+    const isMetricsDispute =
+      reason.toUpperCase().includes("METRIC") ||
+      reason.toUpperCase().includes("FOLLOWER") ||
+      reason.toUpperCase().includes("ENGAGEMENT");
+
+    const isListingVerified =
+      transaction.listing?.verified === true ||
+      transaction.listing?.verificationStatus === "VERIFIED";
+
+    if (isMetricsDispute && !isListingVerified) {
+      return res.status(400).json({
+        message:
+          "This listing is not platform-verified. Metrics disputes (follower count / engagement rate) are only available for verified purchases. If you have login, 2FA, or credential problems, please select 'Invalid Credentials' or '2FA Locked'.",
+      });
+    }
+
+    const updatedTx = await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        escrowStatus: "DISPUTED",
+        disputeStatus: "OPENED",
+        disputeReason: reason.trim(),
+        disputeProof: (proof || "").trim(),
+        sellerRespondBy: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h seller response window
+        resolvedAt: null,
+      },
+    });
+
+    await delCache("admin:dashboard:stats");
+
+    return res.json({
+      success: true,
+      message:
+        "Dispute submitted successfully. Escrow funds have been frozen. The seller has 24 hours to submit counter-evidence before Admin arbitration.",
+      transaction: updatedTx,
+    });
+  } catch (error) {
+    console.error("Raise Escrow Dispute Error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Seller submits counter-evidence / statement in response to an open dispute
+ */
+export const submitSellerDisputeResponse = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    const { id } = req.params; // Transaction ID
+    const { response } = req.body;
+
+    if (!response || !response.trim()) {
+      return res.status(400).json({ message: "Counter-evidence statement is required" });
+    }
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, ownerId: userId },
+      include: { listing: true },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found or unauthorized" });
+    }
+
+    if (transaction.escrowStatus !== "DISPUTED") {
+      return res.status(400).json({
+        message: `Dispute is not in an active disputed status (current: ${transaction.escrowStatus})`,
+      });
+    }
+
+    const updatedTx = await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        sellerResponse: response.trim(),
+        sellerRespondedAt: new Date(),
+        disputeStatus: "UNDER_ADMIN_REVIEW",
+      },
+    });
+
+    await delCache("admin:dashboard:stats");
+
+    return res.json({
+      success: true,
+      message: "Counter-evidence submitted successfully. The dispute is now under Admin Review.",
+      transaction: updatedTx,
+    });
+  } catch (error) {
+    console.error("Submit Seller Dispute Response Error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Buyer submits single-shot 24h appeal on rejected disputes for Verified listings
+ */
+export const appealDispute = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    const { id } = req.params; // Transaction ID
+    const { appealReason, appealEvidence } = req.body;
+
+    if (!appealEvidence || !appealEvidence.trim()) {
+      return res.status(400).json({ message: "Please provide new evidence for your appeal" });
+    }
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId },
+      include: { listing: true },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found or unauthorized" });
+    }
+
+    const isListingVerified =
+      transaction.listing?.verified === true ||
+      transaction.listing?.verificationStatus === "VERIFIED";
+
+    if (!isListingVerified) {
+      return res.status(400).json({
+        message: "Appeals are only permitted for platform-verified listings.",
+      });
+    }
+
+    if (transaction.isAppealed) {
+      return res.status(400).json({
+        message: "The one-time appeal for this transaction has already been used.",
+      });
+    }
+
+    if (transaction.disputeStatus !== "REJECTED" && transaction.escrowStatus !== "COMPLETED") {
+      return res.status(400).json({
+        message: "Only rejected dispute decisions can be appealed.",
+      });
+    }
+
+    // 24h appeal window check
+    if (transaction.resolvedAt) {
+      const msSinceResolution = Date.now() - new Date(transaction.resolvedAt).getTime();
+      const hoursSinceResolution = msSinceResolution / (1000 * 60 * 60);
+      if (hoursSinceResolution > 24) {
+        return res.status(400).json({
+          message: "The 24-hour appeal window for this decision has expired.",
+        });
+      }
+    }
+
+    const updatedTx = await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        escrowStatus: "DISPUTED",
+        disputeStatus: "APPEALED",
+        isAppealed: true,
+        appealReason: (appealReason || "Buyer appeal with new evidence").trim(),
+        appealEvidence: appealEvidence.trim(),
+        appealCreatedAt: new Date(),
+      },
+    });
+
+    await delCache("admin:dashboard:stats");
+
+    return res.json({
+      success: true,
+      message: "Appeal submitted successfully with new evidence. Re-opened for final Admin review.",
+      transaction: updatedTx,
+    });
+  } catch (error) {
+    console.error("Appeal Dispute Error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Seller confirms handover checklist (logged out of devices, 2FA removed, email changed)
+ * This unlocks credential decryption for the buyer in /my-orders
+ */
+export const confirmHandover = async (req, res) => {
+  try {
+    const { userId } = await req.auth();
+    const { id } = req.params; // listingId
+
+    const listing = await prisma.listing.findFirst({
+      where: { id, ownerId: userId },
     });
 
     if (!listing) {
-      return res.status(404).json({ message: "Listing not found" });
+      return res.status(404).json({ message: "Listing not found or unauthorized" });
     }
 
-    if (listing.ownerId === userId) {
-      return res.status(400).json({ message: "You cannot purchase your own listing" });
-    }
-
-    if (listing.status !== "active") {
+    if (listing.status !== "sold") {
       return res.status(400).json({
-        message: `This listing is ${listing.status} and cannot be purchased`,
+        message: "Handover checklist can only be confirmed for sold listings.",
       });
     }
 
-    // Execute atomic purchase transaction
-    const transaction = await prisma.$transaction(async (tx) => {
-      // 1. Mark listing as sold
-      const updatedListing = await tx.listing.update({
-        where: { id },
-        data: { status: "sold" },
+    if (listing.isHandoverConfirmed) {
+      return res.json({
+        success: true,
+        message: "Handover is already confirmed for this listing.",
       });
+    }
 
-      // 2. Create Transaction record
-      const createdTx = await tx.transaction.create({
-        data: {
-          listingId: listing.id,
-          ownerId: listing.ownerId,
-          userId,
-          amount: listing.price,
-          isPaid: true,
-        },
-      });
-
-      // 3. Credit seller's earned balance
-      await tx.user.update({
-        where: { id: listing.ownerId },
-        data: {
-          earned: { increment: listing.price },
-        },
-      });
-
-      return createdTx;
+    const updatedListing = await prisma.listing.update({
+      where: { id },
+      data: {
+        isHandoverConfirmed: true,
+        handoverConfirmedAt: new Date(),
+      },
     });
 
-    // Invalidate Redis caches
-    await delCache("listings:public", `listing:detail:${id}`, "admin:dashboard:stats");
+    await delCachePattern("listings:*");
+    await delCache("admin:dashboard:stats");
 
-    return res.status(201).json({
-      message: "Account purchased successfully! The credentials have been released to your orders.",
-      transaction,
+    return res.json({
+      success: true,
+      message: "Handover checklist confirmed! The buyer can now decrypt and access account credentials.",
+      listing: updatedListing,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: error.code || error.message,
-    });
+    console.error("Confirm Handover Error:", error);
+    res.status(500).json({ message: error.code || error.message });
   }
 };
 
 export const getAllUserOrders = async (req, res) => {
   try {
     const { userId } = await req.auth();
+
+    // Check and process any expired 24h inspection windows
+    await autoReleaseExpiredEscrows();
 
     let orders = await prisma.transaction.findMany({
       where: { userId, isPaid: true },
@@ -759,7 +1123,8 @@ export const getAllUserOrders = async (req, res) => {
       );
 
       let decryptedCred = null;
-      if (cred) {
+      // 🛡️ HANDOVER GATE: Only decrypt credentials if seller has confirmed handover
+      if (cred && order.listing?.isHandoverConfirmed) {
         const decryptList = (list) =>
           (list || []).map((item) => ({
             ...item,

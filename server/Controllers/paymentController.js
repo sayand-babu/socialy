@@ -158,16 +158,28 @@ export const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
+    // Calculate 5% Platform Fee & Net Seller Payout
+    const PLATFORM_FEE_PERCENT = 0.05;
+    const platformFee = Math.round(listing.price * PLATFORM_FEE_PERCENT);
+    const sellerPayout = Number(listing.price) - platformFee;
+    const inspectionEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+
     // Atomic Database Transaction
     const [transaction, updatedListing] = await prisma.$transaction([
-      // 1. Create Transaction record
+      // 1. Create Transaction record with Escrow Status & 24h Inspection Window
       prisma.transaction.create({
         data: {
           listingId: listing.id,
           ownerId: listing.ownerId,
           userId,
           amount: listing.price,
+          platformFee,
+          sellerPayout,
           isPaid: true,
+          escrowStatus: "UNDER_INSPECTION",
+          inspectionEndsAt,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
         },
       }),
 
@@ -177,11 +189,11 @@ export const verifyRazorpayPayment = async (req, res) => {
         data: { status: "sold" },
       }),
 
-      // 3. Credit seller wallet
+      // 3. 🛡️ ESCROW VAULT HOLD: Lock net payout in seller's escrowBalance (NOT withdrawable yet)
       prisma.user.update({
         where: { id: listing.ownerId },
         data: {
-          earned: { increment: listing.price },
+          escrowBalance: { increment: sellerPayout },
         },
       }),
     ]);
