@@ -18,6 +18,7 @@ import CredentialChange from '../src/pages/admin/CredentialChange';
 import AllListings from '../src/pages/admin/AllListings';
 import Transactions from '../src/pages/admin/Transactions';
 import Withdrawal from '../src/pages/admin/Withdrawal';
+import Disputes from '../src/pages/admin/Disputes';
 
 const App = () => {
   const { pathname } = useLocation();
@@ -43,6 +44,7 @@ const App = () => {
           <Route path="list-listings" element={<AllListings />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="withdrawal" element={<Withdrawal />} />
+          <Route path="disputes" element={<Disputes />} />
         </Route>
       </Routes>
       <Chatbox />

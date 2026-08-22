@@ -8,6 +8,7 @@ import {
   Settings2Icon,
   WalletIcon,
   ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { assets } from '../../assets/assets';
 
@@ -26,6 +27,7 @@ const AdminSidebar = () => {
     { name: 'Change', path: '/admin/change-credentials', icon: Settings2Icon },
     { name: 'Listings', path: '/admin/list-listings', icon: ListIcon },
     { name: 'Transactions', path: '/admin/transactions', icon: BanknoteIcon },
+    { name: 'Disputes', path: '/admin/disputes', icon: ShieldAlert },
     { name: 'Withdrawal', path: '/admin/withdrawal', icon: WalletIcon },
   ];
 

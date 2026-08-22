@@ -17,6 +17,24 @@ export const verifyCredential = async (listingId, token) => {
   return res.data;
 };
 
+export const rejectListingCredential = async (listingId, reason, token) => {
+  const res = await api.post(
+    '/admin/credentials/reject',
+    { listingId, reason },
+    authHeaders(token)
+  );
+  return res.data;
+};
+
+export const flagListingFraud = async (listingId, reason, token) => {
+  const res = await api.post(
+    '/admin/credentials/flag',
+    { listingId, reason },
+    authHeaders(token)
+  );
+  return res.data;
+};
+
 export const getPendingCredentialChanges = async (token) => {
   const res = await api.get('/admin/credentials/change', authHeaders(token));
   return res.data.listings || [];
@@ -62,6 +80,20 @@ export const approveWithdrawal = async (withdrawalId, token) => {
 
 export const checkAdminRole = async (token) => {
   const res = await api.get('/admin/check-role', authHeaders(token));
+  return res.data;
+};
+
+export const getAllAdminDisputes = async (token) => {
+  const res = await api.get('/admin/disputes', authHeaders(token));
+  return res.data.disputes || [];
+};
+
+export const resolveAdminDispute = async (disputeId, decision, token) => {
+  const res = await api.post(
+    `/admin/disputes/${disputeId}/resolve`,
+    { decision },
+    authHeaders(token)
+  );
   return res.data;
 };
 
