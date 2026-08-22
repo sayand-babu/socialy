@@ -1,190 +1,181 @@
-import { generateText } from "../config/gemini.js";
-import { sanitizeText } from "../utils/sanitizer.js";
+import { GoogleGenAI } from "@google/genai";
+import { SOCIALY_SYSTEM_INSTRUCTION } from "../utils/aiKnowledgeBase.js";
 
-const MAX_CUSTOM_PROMPT_LENGTH = 250;
+let genAIInstance = null;
 
-const VALID_PLATFORMS = [
-  "youtube",
-  "instagram",
-  "tiktok",
-  "facebook",
-  "twitter",
-  "linkedin",
-  "pinterest",
-  "snapchat",
-  "twitch",
-  "discord",
-];
-
-const VALID_NICHES = [
-  "lifestyle",
-  "fitness",
-  "food",
-  "travel",
-  "tech",
-  "gaming",
-  "fashion",
-  "beauty",
-  "business",
-  "education",
-  "entertainment",
-  "music",
-  "art",
-  "sports",
-  "health",
-  "finance",
-  "other",
-];
-
-/**
- * Deterministic Regex Parser fallback for natural language marketplace queries
- */
-export const fallbackParseQuery = (rawQuery) => {
-  const q = rawQuery.toLowerCase();
-  const result = {
-    search: "",
-    platform: [],
-    niche: "",
-    maxPrice: 100000,
-    minFollowers: 0,
-    monetized: false,
-    verified: false,
-    summary: "",
-  };
-
-  // 1. Detect Platforms
-  for (const plat of VALID_PLATFORMS) {
-    if (q.includes(plat)) {
-      result.platform.push(plat);
-    }
+const getGenAIClient = () => {
+  if (!genAIInstance && process.env.GEMINI_API_KEY) {
+    genAIInstance = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
-
-  // 2. Detect Niches
-  for (const niche of VALID_NICHES) {
-    if (q.includes(niche) || (niche === "tech" && q.includes("technology"))) {
-      result.niche = niche;
-      break;
-    }
-  }
-
-  // 3. Detect Monetization & Verification
-  if (q.includes("monetized") || q.includes("monetised") || q.includes("adsense") || q.includes("monetization")) {
-    result.monetized = true;
-  }
-  if (q.includes("verified") || q.includes("blue tick") || q.includes("badge") || q.includes("check mark")) {
-    result.verified = true;
-  }
-
-  // 4. Detect Price (e.g. "under 50k", "below 20000", "< 50000", "under 1 lakh")
-  const priceMatch = q.match(/(?:under|below|less than|max|budget of|within|<=?)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*(k|lakh|thousand)?/i);
-  if (priceMatch) {
-    let val = parseFloat(priceMatch[1]);
-    const unit = (priceMatch[2] || "").toLowerCase();
-    if (unit === "k" || unit === "thousand") val *= 1000;
-    if (unit === "lakh") val *= 100000;
-    result.maxPrice = Math.min(100000, Math.max(100, Math.round(val)));
-  }
-
-  // 5. Detect Followers (e.g. "10k+ followers", "above 50k subs", "min 5000")
-  const followerMatch = q.match(/(?:above|more than|min|at least|>=?)\s*(\d+(?:\.\d+)?)\s*(k|m|thousand|million)?\s*(?:followers|subs|subscribers)?/i)
-    || q.match(/(\d+(?:\.\d+)?)\s*(k|m)\s*\+?\s*(?:followers|subs|subscribers)/i);
-
-  if (followerMatch) {
-    let val = parseFloat(followerMatch[1]);
-    const unit = (followerMatch[2] || "").toLowerCase();
-    if (unit === "k" || unit === "thousand") val *= 1000;
-    if (unit === "m" || unit === "million") val *= 1000000;
-    result.minFollowers = Math.round(val);
-  }
-
-  // Generate summary
-  const parts = [];
-  if (result.verified) parts.push("Verified");
-  if (result.monetized) parts.push("Monetized");
-  if (result.platform.length > 0) parts.push(result.platform.join("/"));
-  if (result.niche) parts.push(`in ${result.niche}`);
-  if (result.maxPrice < 100000) parts.push(`under ₹${result.maxPrice.toLocaleString()}`);
-  if (result.minFollowers > 0) parts.push(`with ${result.minFollowers.toLocaleString()}+ followers`);
-
-  result.summary = parts.length > 0 ? parts.join(" ") : `Listings matching "${rawQuery}"`;
-  return result;
+  return genAIInstance;
 };
 
 /**
- * Controller to parse natural language search queries into structured marketplace filters
+ * Handle AI chat inquiries regarding Socialy platform and escrow lifecycle
  */
-export const parseNaturalLanguageSearch = async (req, res) => {
+export const chatWithAi = async (req, res) => {
   try {
-    const rawQuery = req.body.query || "";
-    const cleanQuery = sanitizeText(rawQuery).slice(0, 200);
+    const { message, history } = req.body;
 
-    if (!cleanQuery) {
-      return res.status(400).json({ message: "Search query cannot be empty" });
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ message: "Message is required" });
     }
 
-    // Attempt Gemini AI Structured Extraction
-    const prompt = `You are a search query compiler for an online social media escrow marketplace.
-Convert the user's conversational search request into a precise JSON filter object.
+    const trimmedMessage = message.trim();
+    const apiKey = process.env.GEMINI_API_KEY;
 
-AVAILABLE PLATFORMS: ["youtube", "instagram", "tiktok", "facebook", "twitter", "linkedin", "twitch", "discord"]
-AVAILABLE NICHES: ["lifestyle", "fitness", "food", "travel", "tech", "gaming", "fashion", "beauty", "business", "education", "entertainment", "music", "art", "sports", "health", "finance", "other"]
+    if (!apiKey) {
+      return res.json({
+        reply: getFallbackAnswer(trimmedMessage),
+        fallback: true,
+      });
+    }
 
-USER QUERY: "${cleanQuery}"
+    try {
+      const ai = getGenAIClient();
 
-JSON SCHEMA TO RETURN (Strict JSON only, no markdown):
-{
-  "search": "any remaining specific search keywords like brand name or topic, or empty string",
-  "platform": ["matched platform or empty array"],
-  "niche": "matched niche or empty string",
-  "maxPrice": number (e.g. 50000 for "under 50k", or 100000 if not specified),
-  "minFollowers": number (e.g. 10000 for "10k+ followers", or 0 if not specified),
-  "monetized": true | false,
-  "verified": true | false,
-  "summary": "Concise 1-sentence friendly summary of filters applied"
-}`;
+      // Format conversation history for Gemini contents
+      const formattedContents = [];
 
-    const rawAI = await generateText(prompt, { temperature: 0.1, maxOutputTokens: 300 });
+      if (Array.isArray(history) && history.length > 0) {
+        history.slice(-8).forEach((item) => {
+          if (item.text && item.role) {
+            formattedContents.push({
+              role: item.role === "user" ? "user" : "model",
+              parts: [{ text: item.text }],
+            });
+          }
+        });
+      }
 
-    if (rawAI) {
-      try {
-        const cleanedJson = rawAI.replace(/```json/gi, "").replace(/```/g, "").trim();
-        const parsed = JSON.parse(cleanedJson);
+      // Append current user message
+      formattedContents.push({
+        role: "user",
+        parts: [{ text: trimmedMessage }],
+      });
 
-        // Sanitize and validate fields
-        const safeParsed = {
-          search: sanitizeText(parsed.search || ""),
-          platform: Array.isArray(parsed.platform)
-            ? parsed.platform.filter((p) => VALID_PLATFORMS.includes(p.toLowerCase()))
-            : [],
-          niche: VALID_NICHES.includes(parsed.niche?.toLowerCase()) ? parsed.niche.toLowerCase() : "",
-          maxPrice: typeof parsed.maxPrice === "number" && parsed.maxPrice > 0 ? Math.min(100000, parsed.maxPrice) : 100000,
-          minFollowers: typeof parsed.minFollowers === "number" && parsed.minFollowers >= 0 ? parsed.minFollowers : 0,
-          monetized: Boolean(parsed.monetized),
-          verified: Boolean(parsed.verified),
-          summary: sanitizeText(parsed.summary || `Filters applied for "${cleanQuery}"`),
-        };
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: formattedContents,
+        config: {
+          systemInstruction: SOCIALY_SYSTEM_INSTRUCTION,
+          temperature: 0.7,
+        },
+      });
 
-        return res.json({ success: true, parsed: safeParsed });
-      } catch (jsonErr) {
-        console.warn("⚠️ [AI Search JSON Parse Error]:", jsonErr.message);
+      const replyText =
+        response.text ||
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "I'm here to help! Could you please clarify your question regarding Socialy or our escrow process?";
+
+      return res.json({
+        success: true,
+        reply: replyText,
+      });
+    } catch (aiErr) {
+      console.error("Gemini API Generation Error:", aiErr);
+      // Return safe contextual fallback response instead of failing
+      return res.json({
+        success: true,
+        reply: getFallbackAnswer(trimmedMessage),
+        fallback: true,
+      });
+    }
+  } catch (error) {
+    console.error("AI Controller Error:", error);
+    res.status(500).json({ message: error.code || error.message });
+  }
+};
+
+/**
+ * Contextual fallback responses for core Socialy questions
+ */
+function getFallbackAnswer(query) {
+  const q = query.toLowerCase();
+
+  if (q.includes("fee") || q.includes("commission") || q.includes("cut") || q.includes("charge")) {
+    return "### 💰 Platform Fees & Payouts\n- **Platform Fee**: **5%** is deducted upon successful completion of the escrow transaction.\n- **Seller Payout**: You receive **95%** of the listing price.\n- **Buyer**: Pays the exact listed price with zero hidden buyer surcharges.";
+  }
+
+  if (q.includes("escrow") || q.includes("how it work") || q.includes("safeguard") || q.includes("protect")) {
+    return "### 🛡️ How Socialy Escrow Works\n1. **Buyer Pays**: Payment is securely held in the platform Escrow Vault.\n2. **Instant Access**: The buyer immediately receives the AES-256 decrypted account credentials.\n3. **24-Hour Inspection Window**: The buyer has 24 hours to test login details and verify the account.\n4. **Payout Release**: If everything is functional, the buyer confirms release (or it auto-releases after 24h) and 95% payout is credited to the seller!";
+  }
+
+  if (q.includes("dispute") || q.includes("wrong password") || q.includes("invalid") || q.includes("scam")) {
+    return "### ⚠️ What Happens If There's an Issue?\n- **Raising a Dispute**: During the 24-hour inspection window, a buyer can click **'Raise Dispute'** to freeze escrow payout.\n- **Unverified Accounts**: Only credential/access issues (*Invalid Credentials / Login Failed*) can be disputed.\n- **Seller Response (24h)**: The seller has 24 hours to provide counter-evidence.\n- **Dispute Upheld**: Buyer receives a **100% full refund** via Razorpay, and the seller receives a strike (+1 fault).";
+  }
+
+  if (q.includes("list") || q.includes("sell") || q.includes("handover")) {
+    return "### 🚀 How to List & Sell on Socialy\n1. Go to **List Account** (`/manage-listing`).\n2. Enter account metrics (platform, handle, followers, engagement rate, monthly views, niche, price).\n3. Click **Submit Credentials** in *My Listings* and complete the **4-Point Handover Prep Checklist**.\n4. Once an order arrives, escrow handles the transaction and releases your earnings safely!";
+  }
+
+/**
+ * Parse natural language queries into structured marketplace filters
+ */
+export const parseSearch = async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || typeof query !== "string") {
+      return res.json({ parsed: null });
+    }
+
+    const q = query.toLowerCase();
+    const parsed = {};
+
+    // Detect Platform
+    const platforms = ["youtube", "instagram", "tiktok", "facebook", "twitter", "linkedin", "twitch", "discord"];
+    for (const p of platforms) {
+      if (q.includes(p) || (p === "instagram" && q.includes("insta")) || (p === "twitter" && q.includes("x/twitter"))) {
+        parsed.platform = [p];
+        break;
       }
     }
 
-    // Fallback to deterministic regex parser
-    const fallback = fallbackParseQuery(cleanQuery);
-    return res.json({ success: true, parsed: fallback });
-  } catch (error) {
-    console.error("Error parsing natural language search:", error);
-    // Even on server error, return safe fallback
-    const fallback = fallbackParseQuery(req.body?.query || "");
-    return res.json({ success: true, parsed: fallback });
+    // Detect Niche
+    const niches = [
+      "lifestyle", "fitness", "food", "travel", "tech", "technology", "gaming", "fashion",
+      "beauty", "business", "education", "entertainment", "music", "art", "sports", "health", "finance"
+    ];
+    for (const n of niches) {
+      if (q.includes(n)) {
+        parsed.niche = n === "technology" ? "tech" : n;
+        break;
+      }
+    }
+
+    // Detect Max Price (e.g. "under 5000", "below 10k", "<500")
+    const priceMatch = q.match(/(?:under|below|<|less than)\s*([₹$]?\s*(\d+(?:\.\d+)?)\s*(k|lakh|lac)?)/i);
+    if (priceMatch) {
+      let num = parseFloat(priceMatch[2]);
+      if (priceMatch[3]?.toLowerCase() === "k") num *= 1000;
+      if (priceMatch[3]?.toLowerCase().startsWith("la")) num *= 100000;
+      if (!isNaN(num) && num > 0) parsed.maxPrice = num;
+    }
+
+    // Detect Min Followers (e.g. "more than 10k followers", "> 5k", "above 50k")
+    const followersMatch = q.match(/(?:above|over|>|more than|min)\s*(\d+(?:\.\d+)?)\s*(k|m)?\s*(?:followers|subs)?/i);
+    if (followersMatch) {
+      let num = parseFloat(followersMatch[1]);
+      if (followersMatch[2]?.toLowerCase() === "k") num *= 1000;
+      if (followersMatch[2]?.toLowerCase() === "m") num *= 1000000;
+      if (!isNaN(num) && num > 0) parsed.minFollowers = num;
+    }
+
+    // Detect Verified / Monetized tags
+    if (q.includes("verif")) parsed.verified = true;
+    if (q.includes("monetiz") || q.includes("earning")) parsed.monetized = true;
+
+    return res.json({ success: true, parsed });
+  } catch (err) {
+    console.error("Parse Search Error:", err);
+    return res.json({ parsed: null });
   }
 };
 
 /**
- * Controller to generate an AI-powered sales pitch / description for a listing
+ * Generate AI-powered listing description using Gemini with smart fallback
  */
-export const generateListingDescription = async (req, res) => {
+export const generateDescription = async (req, res) => {
   try {
     const {
       title,
@@ -201,73 +192,103 @@ export const generateListingDescription = async (req, res) => {
       customPrompt,
     } = req.body;
 
-    if (!platform || !niche) {
-      return res.status(400).json({
-        message: "Platform and niche are required to generate an accurate description.",
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.json({
+        description: generateFallbackDescription({
+          title,
+          platform,
+          username,
+          niche,
+          followers_count,
+          engagement_rate,
+          monetized,
+          verified,
+        }),
       });
     }
 
-    let sanitizedCustomPrompt = "";
-    if (customPrompt && typeof customPrompt === "string") {
-      sanitizedCustomPrompt = sanitizeText(customPrompt).slice(0, MAX_CUSTOM_PROMPT_LENGTH);
-    }
+    try {
+      const ai = getGenAIClient();
+      const prompt = `Write a high-converting, professional, and engaging sales description for a social media account listing on Socialy.
+Account Details:
+- Platform: ${platform || "Social Media"}
+- Username / Handle: @${username || "handle"}
+- Title: ${title || "Premium Social Account"}
+- Niche: ${niche || "General"}
+- Follower Count: ${(followers_count || 0).toLocaleString()}
+- Engagement Rate: ${engagement_rate || 0}%
+- Monthly Views: ${(monthly_views || 0).toLocaleString()}
+- Monetized: ${monetized ? "Yes (Active monetization)" : "No"}
+- Verified: ${verified ? "Yes" : "No"}
+- Primary Audience Location: ${country || "Global"}
+- Audience Age Range: ${age_range || "All ages"}
+${customPrompt ? `- Extra Seller Notes: ${customPrompt}` : ""}
 
-    const followers = Number(followers_count) || 0;
-    const engagement = engagement_rate ? `${Number(engagement_rate)}%` : "N/A";
-    const views = monthly_views ? Number(monthly_views).toLocaleString() : "N/A";
-    const cleanCountry = sanitizeText(country || "Global / India");
-    const cleanAgeRange = sanitizeText(age_range || "Mixed");
-    const cleanUsername = sanitizeText(username || "");
-    const cleanTitle = sanitizeText(title || `${platform} ${niche} account`);
+Structure the description with:
+1. Compelling Headline & Hook
+2. Key Highlights & Audience Demographics
+3. Monetization & Growth Opportunities
+4. Safe Escrow Transfer Assurance (via Socialy Escrow)`;
 
-    const prompt = `You are an elite digital asset copywriter and social media broker.
-Write a compelling, professional, high-converting sales listing description for an account on Socialy (an escrow marketplace).
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
 
-ACCOUNT SPECIFICATIONS:
-- Platform: ${platform}
-- Title / Focus: ${cleanTitle}
-${cleanUsername ? `- Handle/Username: @${cleanUsername}` : ""}
-- Niche / Category: ${niche}
-- Follower / Subscriber Count: ${followers.toLocaleString()}
-- Engagement Rate: ${engagement}
-- Monthly Views / Impressions: ${views}
-- Monetization Status: ${monetized ? "Enabled (Eligible for direct platform revenue)" : "Standard account"}
-- Verification Badge: ${verified ? "Platform Verified / Blue Tick" : "Non-verified"}
-- Primary Audience Location: ${cleanCountry}
-- Target Age Demographic: ${cleanAgeRange}
-${sanitizedCustomPrompt ? `\nSELLER'S CUSTOM FOCUS INSTRUCTIONS:\n"${sanitizedCustomPrompt}"` : ""}
+      const description =
+        response.text ||
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        generateFallbackDescription({
+          title,
+          platform,
+          username,
+          niche,
+          followers_count,
+          engagement_rate,
+          monetized,
+          verified,
+        });
 
-REQUIREMENTS:
-1. Write in a clear, persuasive, professional tone that appeals to serious buyers and investors.
-2. Structure with:
-   - Catchy opening overview hook
-   - Key Account Highlights (bullet points of metrics, engagement, growth)
-   - Monetization & Revenue Opportunities (sponsorships, affiliate, brand deals)
-   - Transfer & Security assurance statement (mentioning Socialy Escrow protection)
-3. Keep the total length around 150 - 250 words. Do NOT include markdown code fences (like \`\`\`).
-4. Avoid exaggerations not backed by the stats provided.`;
-
-    const generated = await generateText(prompt, {
-      temperature: 0.7,
-      maxOutputTokens: 800,
-    });
-
-    if (!generated) {
-      return res.status(503).json({
-        message: "AI service is temporarily unavailable. Please try again in a moment.",
+      return res.json({ success: true, description });
+    } catch (aiErr) {
+      console.error("Gemini Generate Description Error:", aiErr);
+      return res.json({
+        success: true,
+        description: generateFallbackDescription({
+          title,
+          platform,
+          username,
+          niche,
+          followers_count,
+          engagement_rate,
+          monetized,
+          verified,
+        }),
       });
     }
-
-    const cleanText = generated.replace(/```markdown/gi, "").replace(/```/g, "").trim();
-
-    return res.json({
-      success: true,
-      description: cleanText,
-    });
   } catch (error) {
-    console.error("Error in generateListingDescription:", error);
-    return res.status(500).json({
-      message: error.message || "Failed to generate AI description.",
-    });
+    console.error("Generate Description Error:", error);
+    res.status(500).json({ message: error.code || error.message });
   }
 };
+
+function generateFallbackDescription({ title, platform, username, niche, followers_count, engagement_rate, monetized, verified }) {
+  return `### 🌟 Premium ${platform ? platform.toUpperCase() : "Social Media"} Asset — @${username || "account"}
+
+**${title || "Established Account in " + niche}**
+
+#### 📊 Account Highlights:
+- **Niche / Category**: ${niche || "General"}
+- **Followers / Subscribers**: ${(followers_count || 0).toLocaleString()} active audience
+- **Engagement Rate**: ${engagement_rate || 0}% organic interaction
+- **Monetization**: ${monetized ? "✅ Fully Monetized" : "Ready for Sponsorships & Affiliate Sales"}
+- **Verification**: ${verified ? "✅ Verified Account" : "Organic Clean Standing"}
+
+#### 🚀 Growth & Monetization Potential:
+This account has a highly engaged follower base ready for immediate brand deals, affiliate marketing, or digital product launches. Perfect for creators, agencies, or investors looking for a turn-key social media presence.
+
+#### 🛡️ Escrow Transfer Guarantee:
+Transaction conducted exclusively via **Socialy Escrow** with a 24-hour buyer inspection window and zero-trust credential security.`;
+}

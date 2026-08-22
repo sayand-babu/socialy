@@ -1,16 +1,15 @@
 import express from "express";
-import {
-  generateListingDescription,
-  parseNaturalLanguageSearch,
-} from "../Controllers/aiController.js";
-import { protect } from "../Middlewares/authMiddleware.js";
+import { chatWithAi, parseSearch, generateDescription } from "../Controllers/aiController.js";
 
 const aiRouter = express.Router();
 
-// Generate high-converting sales listing description using Gemini (authenticated)
-aiRouter.post("/generate-description", protect, generateListingDescription);
+// Public endpoint for floating AI Assistant queries
+aiRouter.post("/chat", chatWithAi);
 
-// Parse natural language search queries into marketplace filters (publicly accessible)
-aiRouter.post("/parse-search", parseNaturalLanguageSearch);
+// Endpoint for natural language search filter parsing
+aiRouter.post("/parse-search", parseSearch);
+
+// Endpoint for generating listing descriptions
+aiRouter.post("/generate-description", generateDescription);
 
 export default aiRouter;

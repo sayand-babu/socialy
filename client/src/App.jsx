@@ -10,6 +10,7 @@ import MyOrders from './pages/MyOrders';
 import Loading from './pages/Loading';
 import Navbar from './components/Navbar';
 import Chatbox from './components/Chatbox';
+import AiCopilotWidget from './components/AiCopilotWidget';
 import { Toaster } from 'react-hot-toast';
 import Layout from '../src/pages/admin/Layout';
 import Dashboard from '../src/pages/admin/Dashboard';
@@ -48,6 +49,7 @@ const App = () => {
         </Route>
       </Routes>
       <Chatbox />
+      <AiCopilotWidget />
     </div>
   );
 };

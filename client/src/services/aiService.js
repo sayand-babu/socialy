@@ -3,37 +3,35 @@ import api from './api';
 const authHeaders = (token) => (token ? { headers: { Authorization: `Bearer ${token}` } } : {});
 
 /**
- * Request AI-generated high converting sales description for a listing
- * @param {object} payload - Listing metrics (platform, niche, followers, etc.) + custom prompt
- * @param {string} token - Clerk auth JWT token
- * @returns {Promise<{ success: boolean, description: string }>} Generated description
+ * Send inquiry message to Socialy AI Copilot
+ * @param {string} message - User query
+ * @param {Array} history - Session history array: [{ role: 'user'|'model', text: string }]
  */
-export const generateAIDescription = async (payload, token) => {
+export const askAiCopilot = async (message, history = []) => {
+  const res = await api.post('/ai/chat', { message, history });
+  return res.data;
+};
+
+/**
+ * Parse natural language search query into structured listing filters
+ * @param {string} query - Natural language search phrase
+ */
+export const parseNaturalLanguageSearch = async (query) => {
   try {
-    const response = await api.post('/ai/generate-description', payload, authHeaders(token));
-    return response.data;
+    const res = await api.post('/ai/parse-search', { query });
+    return res.data;
   } catch (error) {
-    console.error('Error generating AI description:', error);
-    throw error;
+    console.error('Natural language parse error:', error);
+    return { parsed: null };
   }
 };
 
 /**
- * Parse conversational natural language query into structured marketplace filters
- * @param {string} query - Conversational search string (e.g. "monetized tech youtube under 50k")
- * @returns {Promise<{ success: boolean, parsed: object }>} Parsed filter object
+ * Generate high-converting AI description for a social media account listing
+ * @param {object} payload - Account metrics and details
+ * @param {string} token - User auth token
  */
-export const parseNaturalLanguageSearch = async (query) => {
-  try {
-    const response = await api.post('/ai/parse-search', { query });
-    return response.data;
-  } catch (error) {
-    console.error('Error parsing natural language search:', error);
-    throw error;
-  }
-};
-
-export default {
-  generateAIDescription,
-  parseNaturalLanguageSearch,
+export const generateAIDescription = async (payload, token) => {
+  const res = await api.post('/ai/generate-description', payload, authHeaders(token));
+  return res.data;
 };
