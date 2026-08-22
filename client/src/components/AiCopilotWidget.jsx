@@ -21,7 +21,7 @@ const SUGGESTIONS = [
 
 const INITIAL_MESSAGE = {
   role: 'model',
-  text: "👋 Hi! I'm **Socialy Copilot**, your AI guide for secure account trading and Escrow protection.\n\nAsk me anything about how buying, selling, 24-hour inspection, or dispute arbitration works!",
+  text: "👋 Hi! I'm **Socialy AI**, your assistant for secure account trading and Escrow protection.\n\nAsk me anything about how buying, selling, 24-hour inspection, or dispute arbitration works!",
 };
 
 export const AiCopilotWidget = () => {
@@ -64,7 +64,7 @@ export const AiCopilotWidget = () => {
 
       setMessages((prev) => [...prev, { role: 'model', text: aiReply }]);
     } catch (err) {
-      console.error('AI Copilot error:', err);
+      console.error('AI Assistant error:', err);
       setMessages((prev) => [
         ...prev,
         {
@@ -160,7 +160,7 @@ export const AiCopilotWidget = () => {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          title="Ask Socialy AI Copilot"
+          title="Ask Socialy AI"
           className="group relative flex items-center gap-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-4 py-3 rounded-full shadow-2xl transition-all duration-200 transform hover:scale-105 cursor-pointer"
         >
           <span className="relative flex h-3 w-3">
@@ -170,7 +170,7 @@ export const AiCopilotWidget = () => {
 
           <div className="flex items-center gap-1.5">
             <Sparkles size={18} className="text-amber-300 animate-pulse" />
-            <span className="text-sm font-bold tracking-wide">Ask AI Copilot</span>
+            <span className="text-sm font-bold tracking-wide">Ask Socialy AI</span>
           </div>
         </button>
       )}
@@ -186,9 +186,9 @@ export const AiCopilotWidget = () => {
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-sm leading-none text-white">Socialy Copilot</h3>
+                  <h3 className="font-bold text-sm leading-none text-white">Socialy AI</h3>
                   <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 px-1.5 py-0.2 rounded-full font-semibold">
-                    Escrow AI
+                    Escrow Assistant
                   </span>
                 </div>
                 <p className="text-[11px] text-indigo-100 mt-0.5 leading-none">
@@ -209,7 +209,7 @@ export const AiCopilotWidget = () => {
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                title="Minimize Copilot"
+                title="Minimize AI Assistant"
                 className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-lg transition cursor-pointer"
               >
                 <X size={17} />
