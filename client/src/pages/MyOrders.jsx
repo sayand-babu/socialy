@@ -645,10 +645,10 @@ export default function MyOrders() {
             </div>
 
             <form onSubmit={handleDisputeSubmit} className="p-5 space-y-4">
-              {/* Unverified Listing Dispute Notice */}
-              {activeDisputeOrder?.listing?.verified !== true && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
-                  <strong>Notice:</strong> This account was not admin-verified prior to purchase. Per Socialy Escrow rules, <strong>Metrics disputes (follower count / engagement)</strong> are not permitted on unverified accounts. Only <strong>login, 2FA, password, or account access</strong> issues can be disputed.
+              {/* If unverified listing, show notice and restrict dropdown ONLY to credential/access failure */}
+              {!activeDisputeOrder?.listing?.verified && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed">
+                  <strong>Unverified Listing Rule:</strong> This account was not admin-verified prior to purchase. Per Socialy Escrow rules, only <strong>Invalid Credentials / Login Failed</strong> or <strong>2FA/Recovery Lock</strong> can be disputed.
                 </div>
               )}
 
@@ -668,17 +668,19 @@ export default function MyOrders() {
                     2FA / Recovery Email Locked by Seller
                   </option>
                   {activeDisputeOrder?.listing?.verified && (
-                    <option value="Account Metrics / Followers Misrepresented">
-                      Account Metrics / Followers Misrepresented (Verified Only)
-                    </option>
+                    <>
+                      <option value="Account Metrics / Followers Misrepresented">
+                        Account Metrics / Followers Misrepresented (Verified Only)
+                      </option>
+                      <option value="Copyright Strikes / Demonetized Account">
+                        Copyright Strikes / Demonetized Account
+                      </option>
+                      <option value="Seller Attempted Unauthorized Recovery">
+                        Seller Attempted Unauthorized Recovery
+                      </option>
+                      <option value="Other Technical Issue">Other Technical Issue</option>
+                    </>
                   )}
-                  <option value="Copyright Strikes / Demonetized Account">
-                    Copyright Strikes / Demonetized Account
-                  </option>
-                  <option value="Seller Attempted Unauthorized Recovery">
-                    Seller Attempted Unauthorized Recovery
-                  </option>
-                  <option value="Other Technical Issue">Other Technical Issue</option>
                 </select>
               </div>
 
