@@ -6,6 +6,7 @@ import { Upload, X, Loader2, Sparkles, Wand2, Lightbulb, CheckCircle } from 'luc
 import toast from 'react-hot-toast';
 import { createListing, updateListing } from '../services/listingService';
 import { generateAIDescription } from '../services/aiService';
+import { uploadAllListingImages } from '../services/uploadService';
 import { fetchUserListings } from '../app/features/ListingSlice';
 
 /* ===================== CONSTANTS ===================== */
@@ -253,10 +254,20 @@ const ManageListing = () => {
         throw new Error('Please sign in before submitting a listing');
       }
 
-      // Build FormData for API
-      const formDataToSend = new FormData();
+      // 1. Upload any new Image files first via decoupled upload pipeline
+      toast.loading('Uploading and optimizing listing images...', { id: 'upload-progress' });
+      const uploadedImageUrls = await uploadAllListingImages(
+        formData.images,
+        token,
+        (curr, tot) => toast.loading(`Uploading image ${curr}/${tot}...`, { id: 'upload-progress' })
+      );
+      toast.dismiss('upload-progress');
 
-      // Add account details as JSON string
+      if (uploadedImageUrls.length === 0) {
+        throw new Error('Please upload at least one valid image');
+      }
+
+      // 2. Build lightweight JSON payload (0 MB server RAM consumption)
       const accountDetails = {
         title: formData.title,
         platform: formData.platform.toLowerCase(),
@@ -275,28 +286,20 @@ const ManageListing = () => {
         description: formData.description || '',
         country: formData.country || '',
         age_range: formData.age_range,
-        verified: formData.verified,
-        monetized: formData.monetized,
-        images: (formData.images || []).filter((img) => typeof img === 'string'),
+        verified: Boolean(formData.verified),
+        monetized: Boolean(formData.monetized),
+        images: uploadedImageUrls,
       };
 
       if (isEditing) {
         accountDetails.id = id;
       }
 
-      formDataToSend.append('accountDetails', JSON.stringify(accountDetails));
-
-      // Add only new image files (File objects, not strings)
-      const newImages = formData.images.filter((img) => img instanceof File);
-      newImages.forEach((file) => {
-        formDataToSend.append('images', file);
-      });
-
-      // Call API
+      // 3. Call API with clean JSON
       if (isEditing) {
-        await updateListing(formDataToSend, token);
+        await updateListing({ accountDetails }, token);
       } else {
-        await createListing(formDataToSend, token);
+        await createListing({ accountDetails }, token);
       }
 
       toast.success(
@@ -312,6 +315,7 @@ const ManageListing = () => {
       }, 500);
     } catch (error) {
       console.error('Error submitting listing:', error);
+      toast.dismiss('upload-progress');
       const errorMessage =
         error.response?.data?.message || error.message || 'Failed to submit listing';
       toast.error(errorMessage);
