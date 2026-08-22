@@ -109,6 +109,9 @@ function getFallbackAnswer(query) {
     return "### 🚀 How to List & Sell on Socialy\n1. Go to **List Account** (`/manage-listing`).\n2. Enter account metrics (platform, handle, followers, engagement rate, monthly views, niche, price).\n3. Click **Submit Credentials** in *My Listings* and complete the **4-Point Handover Prep Checklist**.\n4. Once an order arrives, escrow handles the transaction and releases your earnings safely!";
   }
 
+  return "### 🤖 Socialy AI Assistant\nSocialy is a secure marketplace for trading social media accounts with **Zero-Trust Escrow Protection**.\n\nYou can ask me:\n- *How does the 24-hour escrow inspection window work?*\n- *What are the platform fees and payout splits?*\n- *What happens if login credentials fail?*\n- *How do I list and transfer an account?*";
+}
+
 /**
  * Parse natural language queries into structured marketplace filters
  */
