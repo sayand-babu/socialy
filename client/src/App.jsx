@@ -1,6 +1,6 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 
-import Home from './pages/home';
+import Home from './pages/Home';
 import Marketplace from './pages/MarketPlace';
 import MyListings from './pages/MyListing';
 import ListingDetails from './pages/ListingDetails';
@@ -12,14 +12,14 @@ import Navbar from './components/Navbar';
 import Chatbox from './components/Chatbox';
 import AiCopilotWidget from './components/AiCopilotWidget';
 import { Toaster } from 'react-hot-toast';
-import Layout from '../src/pages/admin/Layout';
-import Dashboard from '../src/pages/admin/Dashboard';
-import CredentialVerify from '../src/pages/admin/CredentialVerify';
-import CredentialChange from '../src/pages/admin/CredentialChange';
-import AllListings from '../src/pages/admin/AllListings';
-import Transactions from '../src/pages/admin/Transactions';
-import Withdrawal from '../src/pages/admin/Withdrawal';
-import Disputes from '../src/pages/admin/Disputes';
+import Layout from './pages/admin/Layout';
+import Dashboard from './pages/admin/Dashboard';
+import CredentialVerify from './pages/admin/CredentialVerify';
+import CredentialChange from './pages/admin/CredentialChange';
+import AllListings from './pages/admin/AllListings';
+import Transactions from './pages/admin/Transactions';
+import Withdrawal from './pages/admin/Withdrawal';
+import Disputes from './pages/admin/Disputes';
 
 const App = () => {
   const { pathname } = useLocation();
