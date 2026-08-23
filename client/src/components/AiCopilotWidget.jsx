@@ -233,11 +233,10 @@ export const AiCopilotWidget = () => {
                   )}
 
                   <div
-                    className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-2xs ${
-                      isUser
+                    className={`max-w-[85%] p-3 rounded-2xl text-xs leading-relaxed shadow-2xs ${isUser
                         ? 'bg-indigo-600 text-white rounded-br-none font-medium'
                         : 'bg-white text-gray-800 border border-gray-200/80 rounded-tl-none'
-                    }`}
+                      }`}
                   >
                     {isUser ? msg.text : renderFormattedText(msg.text)}
                   </div>
