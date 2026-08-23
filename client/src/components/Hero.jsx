@@ -73,11 +73,27 @@ function Hero() {
           Buy and Sell your{' '}
           <span className="relative bg-gradient-to-r from-purple-700 to-[#764de1] bg-clip-text text-transparent">
             social
-            <div className="z-10 absolute bottom-0 left-0 w-full scale-160">
-              <img
-                src="https://raw.githubusercontent.com/prebuiltui/prebuiltui/main/assets/hero/gradient_arc.svg"
-                alt="gradient"
-              />
+            <div className="z-10 absolute -bottom-2 left-0 w-full pointer-events-none">
+              <svg
+                viewBox="0 0 100 12"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-full h-3 overflow-visible"
+              >
+                <path
+                  d="M2 9.5C25 2 75 2 98 9.5"
+                  stroke="url(#hero-gradient-arc)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                />
+                <defs>
+                  <linearGradient id="hero-gradient-arc" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#9333ea" />
+                    <stop offset="50%" stopColor="#764de1" />
+                    <stop offset="100%" stopColor="#4f46e5" />
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
           </span>{' '}
           <span className="relative bg-gradient-to-r from-[#764de1] to-indigo-600 bg-clip-text text-transparent">

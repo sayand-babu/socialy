@@ -7,6 +7,7 @@ import {
 } from "../config/razorpay.js";
 import { ensureUserExists } from "../utils/userHelper.js";
 import { delCache, delCachePattern } from "../config/redis.js";
+import { inngest } from "../src/inngest/index.js";
 
 /**
  * Creates a Razorpay Order for purchasing a marketplace listing
@@ -203,6 +204,21 @@ export const verifyRazorpayPayment = async (req, res) => {
       delCache("listings:public", `listing:detail:${listingId}`, "admin:dashboard:stats"),
       delCachePattern("listings:*"),
     ]);
+
+    // ⚡ INNGEST: Trigger durable 24-hour inspection & auto-release workflow
+    try {
+      await inngest.send({
+        name: "escrow/order.funded",
+        data: {
+          transactionId: transaction.id,
+          orderId: transaction.id,
+          listingId: listing.id,
+          amount: listing.price,
+        },
+      });
+    } catch (inngestErr) {
+      console.warn("Inngest event dispatch warning:", inngestErr.message);
+    }
 
     return res.status(200).json({
       success: true,

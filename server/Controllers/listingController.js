@@ -5,6 +5,7 @@ import { encryptData, decryptData } from "../utils/encryption.js";
 import { ensureUserExists } from "../utils/userHelper.js";
 import { getCache, setCache, delCache, delCachePattern } from "../config/redis.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
+import { inngest } from "../src/inngest/index.js";
 
 // Controller For Adding Listing to Database
 export const addListing = async (req, res) => {
@@ -895,7 +896,7 @@ export const raiseEscrowDispute = async (req, res) => {
     // Freeze payout and start 24h seller response window
     const sellerRespondBy = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const updatedTransaction = await prisma.transaction.update({
+    const updatedTx = await prisma.transaction.update({
       where: { id },
       data: {
         escrowStatus: "DISPUTED",
@@ -916,6 +917,20 @@ export const raiseEscrowDispute = async (req, res) => {
       details: { reason, listingId: transaction.listingId },
       status: "SUCCESS",
     });
+
+    // ⚡ INNGEST: Trigger durable 24-hour seller counter-evidence deadline workflow
+    try {
+      await inngest.send({
+        name: "escrow/dispute.opened",
+        data: {
+          transactionId: updatedTx.id,
+          listingId: transaction.listingId,
+          reason,
+        },
+      });
+    } catch (inngestErr) {
+      console.warn("Inngest dispute event dispatch warning:", inngestErr.message);
+    }
 
     return res.json({
       success: true,

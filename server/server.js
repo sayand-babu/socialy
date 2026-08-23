@@ -52,11 +52,11 @@ app.use("/api/ai", aiRouter);
 const server = http.createServer(app);
 attachChatSocketServer(server);
 
-// Start server locally unless running in a serverless environment.
-if (process.env.NODE_ENV !== "production") {
+// Start server in standalone and container environments (unless Vercel serverless)
+if (process.env.VERCEL !== "1") {
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    console.log(`🚀 Socialy API server listening on port ${port}`);
   });
 }
 

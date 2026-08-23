@@ -1,2 +1,9 @@
 node_modules
 .env
+dist
+tests/reports
+playwright-report
+test-results
+tests/auth/*-session.json
+tests/auth/*-storage-state.json
+.DS_Store

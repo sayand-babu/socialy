@@ -67,7 +67,7 @@ export const getUnverifiedCredentials = async (req, res) => {
       where: {
         isCredentialSubmitted: true,
         isCredentialVerified: false,
-        status: { not: "deleted" },
+        status: { notIn: ["deleted", "sold", "delisted", "ban"] },
       },
       include: { owner: true },
       orderBy: { updatedAt: "desc" },

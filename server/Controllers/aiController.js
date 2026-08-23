@@ -54,8 +54,10 @@ export const chatWithAi = async (req, res) => {
         parts: [{ text: trimmedMessage }],
       });
 
+      const activeModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: activeModel,
         contents: formattedContents,
         config: {
           systemInstruction: SOCIALY_SYSTEM_INSTRUCTION,
@@ -235,8 +237,10 @@ Structure the description with:
 3. Monetization & Growth Opportunities
 4. Safe Escrow Transfer Assurance (via Socialy Escrow)`;
 
+      const activeModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: activeModel,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
 

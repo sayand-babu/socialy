@@ -41,23 +41,38 @@ export const hppProtection = hpp({
 });
 
 /**
- * Helper to build Redis-backed rate limiters with graceful fallback
+ * Helper to build rate limiters with graceful memory store fallback
  */
 const buildLimiter = ({ windowMs, max, message }) => {
-  const store = redis
-    ? new RedisStore({
+  let store = undefined;
+
+  // Use RedisStore only if Redis is explicitly connected and ready
+  if (redis && redis.status === "ready") {
+    try {
+      store = new RedisStore({
         // @ts-expect-error - ioredis client compatibility
-        sendCommand: (...args) => redis.call(...args),
+        sendCommand: async (...args) => {
+          try {
+            return await redis.call(...args);
+          } catch (err) {
+            // Fallback silently if redis connection hiccups
+            return null;
+          }
+        },
         prefix: "rl:",
-      })
-    : undefined;
+      });
+    } catch (e) {
+      store = undefined; // Fallback to built-in memory store
+    }
+  }
 
   return rateLimit({
     windowMs,
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    store,
+    store, // Defaults to built-in high-performance MemoryStore when undefined
+    validate: { xForwardedForHeader: false },
     message: {
       success: false,
       message: message || "Too many requests from this IP. Please try again later.",

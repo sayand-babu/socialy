@@ -1,0 +1,17 @@
+{
+  "buyer": {
+    "email": "dalahdab169@gmail.com",
+    "userId": "user_3I6eFEuA60VlbxirWiUThDW0tZv",
+    "storageState": "tests/auth/buyer.json"
+  },
+  "seller": {
+    "email": "sayand23bcs180@iiitkottayam.ac.in",
+    "userId": "user_3I6hQ7flWpJXUDz3ibP07UMogoa",
+    "storageState": "tests/auth/seller.json"
+  },
+  "admin": {
+    "email": "sayandbabu999@gmail.com",
+    "userId": "user_3AZv324BWhsr9Dqq729nbfohsrY",
+    "storageState": "tests/auth/admin.json"
+  }
+}

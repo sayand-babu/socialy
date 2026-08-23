@@ -82,11 +82,8 @@ const FilterSidebar = ({ showFilterPhone, setShowFilterPhone ,filters, setFilter
 
   useEffect(() => {
     const urlSearch = searchParams.get("search") || "";
-    if (urlSearch !== searchInput) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSearchInput(urlSearch);
-    }
-  }, [searchParams, searchInput]);
+    setSearchInput(urlSearch);
+  }, [searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
