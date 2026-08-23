@@ -1,5 +1,5 @@
 import React from 'react';
-import Hero from '../components/hero';
+import Hero from '../components/Hero';
 import LatestListin from '../components/LatestListing';
 import Plan from '../components/Plan';
 import CTA from '../components/CTA';
