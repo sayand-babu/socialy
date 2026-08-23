@@ -19,6 +19,7 @@ import {
 	withdrawAmount,
 } from "../Controllers/listingController.js";
 import { protect } from "../Middlewares/authMiddleware.js";
+import { disputeRateLimiter } from "../Middlewares/securityMiddleware.js";
 import { validateBody, validateMultipartJson } from "../Middlewares/validateMiddleware.js";
 import {
 	listingDetailsSchema,
@@ -55,9 +56,9 @@ listingRouter.get("/:id", getListingById);
 
 // Escrow lifecycle actions (buyer & seller)
 listingRouter.post("/transactions/:id/confirm", protect, confirmEscrowRelease);
-listingRouter.post("/transactions/:id/dispute", protect, raiseEscrowDispute);
-listingRouter.post("/transactions/:id/seller-response", protect, submitSellerDisputeResponse);
-listingRouter.post("/transactions/:id/appeal", protect, appealDispute);
+listingRouter.post("/transactions/:id/dispute", protect, disputeRateLimiter, raiseEscrowDispute);
+listingRouter.post("/transactions/:id/seller-response", protect, disputeRateLimiter, submitSellerDisputeResponse);
+listingRouter.post("/transactions/:id/appeal", protect, disputeRateLimiter, appealDispute);
 listingRouter.post("/:id/confirm-handover", protect, confirmHandover);
 listingRouter.put("/:id/status", protect, toggleStatus);
 listingRouter.delete("/:id", protect, deleteUserListing);

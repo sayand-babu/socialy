@@ -4,6 +4,7 @@ import prisma from "../config/prisma.js";
 import { encryptData, decryptData } from "../utils/encryption.js";
 import { ensureUserExists } from "../utils/userHelper.js";
 import { getCache, setCache, delCache, delCachePattern } from "../config/redis.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 
 // Controller For Adding Listing to Database
 export const addListing = async (req, res) => {
@@ -828,6 +829,15 @@ export const confirmEscrowRelease = async (req, res) => {
 
     await delCache("admin:dashboard:stats");
 
+    logAuditEvent({
+      action: "ESCROW_CONFIRMED_RELEASE",
+      userId,
+      targetId: transaction.id,
+      ip: req.ip,
+      details: { sellerPayout, listingId: transaction.listingId },
+      status: "SUCCESS",
+    });
+
     return res.json({
       success: true,
       message: "Escrow funds released to seller successfully. Account ownership confirmed!",
@@ -862,40 +872,50 @@ export const raiseEscrowDispute = async (req, res) => {
 
     if (transaction.escrowStatus !== "UNDER_INSPECTION") {
       return res.status(400).json({
-        message: `Cannot dispute order. Current status is ${transaction.escrowStatus.toLowerCase().replace(/_/g, " ")}.`,
+        message: `Cannot dispute. Order is in status: ${transaction.escrowStatus}`,
       });
     }
 
-    // v3 Spec Rule: METRICS_MISMATCH is strictly forbidden on UNVERIFIED listings
+    // v3 Guard: Disallow metrics mismatch claims on unverified listings
     const isMetricsDispute =
       reason.toUpperCase().includes("METRIC") ||
       reason.toUpperCase().includes("FOLLOWER") ||
       reason.toUpperCase().includes("ENGAGEMENT");
 
-    const isListingVerified =
-      transaction.listing?.verified === true ||
-      transaction.listing?.verificationStatus === "VERIFIED";
-
-    if (isMetricsDispute && !isListingVerified) {
+    if (
+      transaction.listing?.verificationStatus === "UNVERIFIED_LIVE" &&
+      isMetricsDispute
+    ) {
       return res.status(400).json({
         message:
-          "This listing is not platform-verified. Metrics disputes (follower count / engagement rate) are only available for verified purchases. If you have login, 2FA, or credential problems, please select 'Invalid Credentials' or '2FA Locked'.",
+          "Metrics mismatch disputes cannot be raised on unverified listings. You may only dispute for invalid credentials or account access issues.",
       });
     }
 
-    const updatedTx = await prisma.transaction.update({
-      where: { id: transaction.id },
+    // Freeze payout and start 24h seller response window
+    const sellerRespondBy = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const updatedTransaction = await prisma.transaction.update({
+      where: { id },
       data: {
         escrowStatus: "DISPUTED",
         disputeStatus: "OPENED",
-        disputeReason: reason.trim(),
-        disputeProof: (proof || "").trim(),
-        sellerRespondBy: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h seller response window
-        resolvedAt: null,
+        disputeReason: reason,
+        disputeProof: proof || null,
+        sellerRespondBy,
       },
     });
 
     await delCache("admin:dashboard:stats");
+
+    logAuditEvent({
+      action: "ESCROW_DISPUTE_RAISED",
+      userId,
+      targetId: transaction.id,
+      ip: req.ip,
+      details: { reason, listingId: transaction.listingId },
+      status: "SUCCESS",
+    });
 
     return res.json({
       success: true,

@@ -2,6 +2,7 @@ import prisma from "../config/prisma.js";
 import { encryptData, decryptData } from "../utils/encryption.js";
 import { getCache, setCache, delCache, delCachePattern } from "../config/redis.js";
 import { getRazorpayInstance } from "../config/razorpay.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 
 // Helper to decrypt list of credential items
 const decryptCredentialsList = (list) =>
@@ -672,6 +673,22 @@ export const resolveDispute = async (req, res) => {
 
       await delCache("admin:dashboard:stats");
       await delCachePattern("listings:*");
+
+      logAuditEvent({
+        action: "ADMIN_DISPUTE_REFUND_UPHELD",
+        userId: req.auth?.userId || "ADMIN",
+        targetId: id,
+        ip: req.ip,
+        details: {
+          refundId: razorpayRefund.id,
+          amount: transaction.amount,
+          sellerId: transaction.ownerId,
+          sellerFaultCount: newFaultCount,
+          newTrustState,
+          targetListingStatus,
+        },
+        status: "SUCCESS",
+      });
 
       return res.json({
         success: true,
