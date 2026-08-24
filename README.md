@@ -1,4 +1,4 @@
-# 🛡️ Socialy - Zero-Trust Escrow Marketplace for Digital Assets & Social Media Accounts
+# Socialy - Zero-Trust Escrow Marketplace for Digital Assets & Social Media Accounts
 
 [![Production Status](https://img.shields.io/badge/Deployment-Live-success?style=for-the-badge&logo=vercel)](https://socialy-beige.vercel.app)
 [![AWS Backend](https://img.shields.io/badge/AWS-EC2%20Backend-FF9900?style=for-the-badge&logo=amazon-aws)](http://13.204.83.17:3000)
@@ -15,7 +15,7 @@
 
 ---
 
-## 🌐 Live Deployments
+## Live Deployments
 
 - **Frontend Application**: [https://socialy-beige.vercel.app](https://socialy-beige.vercel.app) (Vercel Edge Network)
 - **Backend API & WebSockets**: [http://13.204.83.17:3000](http://13.204.83.17:3000) (AWS EC2 Mumbai `ap-south-1`)
@@ -23,33 +23,33 @@
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-### 1. 🔒 Zero-Trust Credential Vault (AES-256-GCM)
-- Account passwords, 2FA backup codes, and recovery emails are encrypted at rest with AES-256-GCM before ever touching the database.
+### 1. Zero-Trust Credential Vault (AES-256-GCM)
+- Account passwords, 2FA backup codes, and recovery emails are encrypted at rest with AES-256-GCM before storage.
 - Credentials remain completely sealed until a buyer completes Razorpay escrow payment.
-- Decryption is protected by authenticated encryption (AuthTag verification against tampering).
+- Decryption is protected by authenticated encryption with AuthTag verification against tampering.
 
-### 2. ⚖️ Irreversible Escrow State Machine
+### 2. Irreversible Escrow State Machine
 - **Pre-Sale Verification**: Sellers submit account details for admin verification before buyer checkout is unlocked.
 - **24-Hour Inspection Window**: When an account is purchased, a persistent 24-hour inspection clock begins. If no dispute is raised, funds auto-release (95% to seller wallet, 5% platform fee).
 - **Dispute Resolution & Evidence Counter**: Buyers can open disputes with video/image proof. Sellers receive a 24-hour deadline to upload counter-evidence before automatic refund forfeit.
 - **Admin Mediation**: Dedicated Admin Portal with dispute override, strike penalties (+1 strike, 3 strikes = permanent account ban), and 1-time credential resubmission permissions (`faulty_resubmit_allowed`).
 
-### 3. 🛡️ ScamShield AI & Real-Time Chat Security
+### 3. ScamShield AI & Real-Time Chat Security
 - Built-in heuristic rule engine and Google Gemini AI analyzing chat messages for scam patterns, off-platform payment attempts, external links, and fraud signals.
 - Integrated WebSocket chat between buyers and sellers with live notification alerts.
 
-### 4. ⚡ Durable Background Workflows (Inngest)
+### 4. Durable Background Workflows (Inngest)
 - Long-running 24-hour escrow inspection timers and dispute deadlines run as persistent, decoupled Inngest steps (`step.sleep("24h")`) that survive server restarts and traffic spikes.
 
-### 5. 🚀 High-Performance Caching & Connection Pooling
+### 5. High-Performance Caching & Connection Pooling
 - **Redis 7**: Caches high-traffic marketplace listings, rate limits authentication and chat spam, and speeds up read queries to `< 10ms`.
 - **Neon Serverless PostgreSQL (PgBouncer)**: Handles up to 10,000 pooled connections for seamless multi-user concurrency.
 
 ---
 
-## 🔄 Dual-Path Escrow Lifecycle (Verified vs. Unverified)
+## Dual-Path Escrow Lifecycle (Verified vs. Unverified)
 
 Socialy implements a strict dual-path escrow lifecycle based on whether the listing underwent pre-sale administrative verification:
 
@@ -66,21 +66,21 @@ flowchart TD
     Start["Seller Creates Listing & Deposits Credentials into AES-256 Vault"] --> PreSale{"Admin Pre-Sale Verification?"}
 
     %% PATH A: Platform-Verified
-    PreSale -- "Admin Verified (Valid Credentials)" --> PathA["🟢 PATH A: Platform-Verified Listing<br/>(isVerified = true)"]:::verified
+    PreSale -- "Admin Verified (Valid Credentials)" --> PathA["PATH A: Platform-Verified Listing<br/>(isVerified = true)"]:::verified
     PathA --> BuyA["Buyer Checkout via Razorpay<br/>Credentials Released in /my-orders"]:::verified
     BuyA --> ClockA["Inngest 24-Hour Inspection Clock Begins"]:::system
     ClockA --> DispA{"Buyer Action in 24h"}
 
-    DispA -- "No Issue / Timer Expires" --> SuccessA["✅ Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
+    DispA -- "No Issue / Timer Expires" --> SuccessA["Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
     DispA -- "Full-Scope Dispute Opened" --> ScopeA["Dispute Scope: FULL<br/>(Credentials, Metrics, Shadowban, Access)"]:::dispute
 
     %% PATH B: Unverified
-    PreSale -- "Pending / Not Pre-Screened" --> PathB["🟡 PATH B: Unverified Listing<br/>(isVerified = false, isCredentialSubmitted = true)"]:::unverified
+    PreSale -- "Pending / Not Pre-Screened" --> PathB["PATH B: Unverified Listing<br/>(isVerified = false, isCredentialSubmitted = true)"]:::unverified
     PathB --> BuyB["Buyer Checkout via Razorpay<br/>Vault Credentials Released in /my-orders"]:::unverified
     BuyB --> ClockB["Inngest 24-Hour Inspection Clock Begins"]:::system
     ClockB --> DispB{"Buyer Action in 24h"}
 
-    DispB -- "No Issue / Timer Expires" --> SuccessB["✅ Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
+    DispB -- "No Issue / Timer Expires" --> SuccessB["Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
     DispB -- "Credentials-Only Dispute Opened" --> ScopeB["Dispute Scope: STRICT / CREDENTIALS-ONLY<br/>(Wrong Password, 2FA Block, Recovery Fail)"]:::dispute
 
     %% Dispute Resolution (Common)
@@ -88,18 +88,18 @@ flowchart TD
     ScopeB --> SellerDeadline
 
     SellerDeadline --> Resolution{"Admin Ruling & Evidence Review"}
-    Resolution -- "Buyer Valid / Bad Credentials" --> Refund["🔴 100% Refund to Buyer<br/>+1 Strike to Seller (3 Strikes = Ban)"]:::dispute
+    Resolution -- "Buyer Valid / Bad Credentials" --> Refund["100% Refund to Buyer<br/>+1 Strike to Seller (3 Strikes = Ban)"]:::dispute
     Resolution -- "Seller Valid / Fraud Claim" --> SuccessA
     Resolution -- "1-Time Credential Error" --> Resubmit["Admin Grants 1-Time Resubmission<br/>(status: faulty_resubmit_allowed)"]:::system
     Resubmit --> PathB
 ```
 
-### 📊 Comparison: Platform-Verified vs. Unverified Escrow
+### Comparison: Platform-Verified vs. Unverified Escrow
 
-| Dimension | 🟢 Platform-Verified (`isVerified: true`) | 🟡 Unverified (`isVerified: false`) |
+| Dimension | Platform-Verified (`isVerified: true`) | Unverified (`isVerified: false`) |
 |---|---|---|
 | **Pre-Sale Status** | Pre-tested and validated by Socialy Admin | Directly listed after credential vault deposit |
-| **Trust Badge** | 🛡️ Verified Platform Badge displayed | 🔒 Escrow Ready (Vault Secured) |
+| **Trust Badge** | Verified Platform Badge displayed | Escrow Ready (Vault Secured) |
 | **Buyer Protection** | 100% Escrow Fund Protection | 100% Escrow Fund Protection |
 | **Inspection Window** | 24 Hours (Inngest Durable Workflow) | 24 Hours (Inngest Durable Workflow) |
 | **Dispute Scope** | **Full Scope**: Credentials, follower analytics, shadowban checks, audience demographic accuracy | **Strict / Credentials-Only**: Invalid login credentials, 2FA lockout, recovery email failure |
@@ -107,7 +107,7 @@ flowchart TD
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```text
                                   User / Client
@@ -130,7 +130,7 @@ flowchart TD
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 socialy/
@@ -164,7 +164,7 @@ socialy/
 
 ---
 
-## 🚀 Getting Started (Local Development)
+## Getting Started (Local Development)
 
 ### Prerequisites
 - **Node.js**: `v20+` or `v22+`
@@ -196,7 +196,7 @@ npm run dev # Starts frontend on http://localhost:5173
 
 ---
 
-## 🐳 Docker Deployment (Full-Stack or Backend-Only)
+## Docker Deployment (Full-Stack or Backend-Only)
 
 ### Launch everything in Docker:
 ```bash
@@ -212,7 +212,7 @@ docker compose exec server npx prisma db push
 
 ---
 
-## 🧪 Automated Testing & Verification
+## Automated Testing & Verification
 
 Socialy includes a comprehensive end-to-end test suite powered by **Playwright** and custom QA verification scripts:
 
@@ -225,17 +225,17 @@ node tests/qa-audit.mjs
 ```
 
 ### Verified Test Coverage:
-- ✅ Buyer Checkout & Escrow Locking
-- ✅ Zero-Trust AES-256 Vault Decryption
-- ✅ 24-Hour Inspection Window Countdown
-- ✅ Pre-Sale Admin Credential Verification
-- ✅ 1-Time Seller Credential Resubmission Flow
-- ✅ Dispute Evidence Upload & Admin Mediation
-- ✅ 100% Refund & Strike Penalty System
+- Buyer Checkout & Escrow Locking
+- Zero-Trust AES-256 Vault Decryption
+- 24-Hour Inspection Window Countdown
+- Pre-Sale Admin Credential Verification
+- 1-Time Seller Credential Resubmission Flow
+- Dispute Evidence Upload & Admin Mediation
+- 100% Refund & Strike Penalty System
 
 ---
 
-## 🛡️ Security & Compliance
+## Security & Compliance
 - **Zero Hardcoded Secrets**: All credentials passed via environment variables.
 - **SQL Injection Immune**: Prepared statements and parameterized queries via Prisma ORM.
 - **XSS & CSRF Protected**: Input sanitization middleware, Helmet headers, and CORS whitelisting.
@@ -243,5 +243,5 @@ node tests/qa-audit.mjs
 
 ---
 
-## 📄 License
+## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -30,7 +30,8 @@ export const getSocketTicket = async (token) => {
 };
 
 export const getChatSocketUrl = (ticket) => {
-  const apiUrl = new URL(import.meta.env.VITE_API_URL || 'http://localhost:3000/api');
+  const rawBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || 'http://localhost:3000/api';
+  const apiUrl = new URL(rawBase.endsWith('/api') ? rawBase : `${rawBase.replace(/\/+$/, '')}/api`);
   apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
   apiUrl.pathname = '/ws';
   apiUrl.search = `ticket=${encodeURIComponent(ticket)}`;

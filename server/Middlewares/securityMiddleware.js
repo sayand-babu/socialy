@@ -131,8 +131,11 @@ export const corsOptions = {
       return callback(null, true);
     }
 
-    // In production, strictly match whitelist
-    if (allowedOrigins.includes(origin)) {
+    // In production, allow whitelist or any vercel.app preview/production deployment
+    if (
+      allowedOrigins.includes(origin) ||
+      (typeof origin === "string" && (origin.endsWith(".vercel.app") || origin.includes("vercel.app")))
+    ) {
       return callback(null, true);
     }
 

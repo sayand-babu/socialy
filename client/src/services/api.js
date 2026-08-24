@@ -1,8 +1,13 @@
 import axios from 'axios';
 
-// Determine API base URL based on environment
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Determine API base URL based on environment (supports VITE_API_URL and VITE_BASE_URL)
+const rawBase =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_BASE_URL ||
+  'http://localhost:3000';
+const API_BASE_URL = rawBase.endsWith('/api')
+  ? rawBase
+  : `${rawBase.replace(/\/+$/, '')}/api`;
 
 // Create axios instance with default config
 const api = axios.create({
