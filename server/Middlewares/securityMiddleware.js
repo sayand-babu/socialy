@@ -126,20 +126,20 @@ export const corsOptions = {
     // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
 
-    if (process.env.NODE_ENV !== "production") {
-      // In development, allow localhost/local network
-      return callback(null, true);
-    }
-
-    // In production, allow whitelist or any vercel.app preview/production deployment
-    if (
+    const isAllowed =
       allowedOrigins.includes(origin) ||
-      (typeof origin === "string" && (origin.endsWith(".vercel.app") || origin.includes("vercel.app")))
-    ) {
+      origin.includes("vercel.app") ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      origin.startsWith("http://13.204.83.17") ||
+      origin.startsWith("https://socialy");
+
+    if (isAllowed) {
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS blocked for unauthorized origin: ${origin}`));
+    console.warn(`CORS blocked request from origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
