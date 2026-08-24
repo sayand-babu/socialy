@@ -1,13 +1,29 @@
 import clerkClient from "../config/clerk.js";
 
+const resolveAuth = async (req) => {
+  try {
+    if (typeof req.auth === "function") {
+      return await req.auth();
+    }
+    return req.auth || {};
+  } catch {
+    return {};
+  }
+};
+
 export const protect = async (req, res, next) => {
   try {
-    const { userId, has } = await req.auth();
+    const authData = await resolveAuth(req);
+    const userId = authData?.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
+    req.userId = userId;
+    req.authData = authData;
+
+    const has = authData?.has;
     const hasPremiumPlan = has ? await has({ plan: "premium" }) : false;
     req.plan = hasPremiumPlan ? "premium" : "free";
 
@@ -22,13 +38,14 @@ export const protect = async (req, res, next) => {
 
 export const requireAdmin = async (req, res, next) => {
   try {
-    const { userId, sessionClaims } = await req.auth();
+    const authData = await resolveAuth(req);
+    const userId = authData?.userId;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Check sessionClaims first
+    const sessionClaims = authData?.sessionClaims;
     let role = sessionClaims?.metadata?.role || sessionClaims?.publicMetadata?.role;
 
     // Fallback: Query Clerk user record directly

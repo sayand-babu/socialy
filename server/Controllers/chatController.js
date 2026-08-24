@@ -1,6 +1,6 @@
 import prisma from "../config/prisma.js";
 import { broadcastChatMessage, createSocketTicket } from "../config/chatSocket.js";
-import { ensureUserExists } from "../utils/userHelper.js";
+import { ensureUserExists, getAuthData } from "../utils/userHelper.js";
 import { sanitizeText } from "../utils/sanitizer.js";
 import { inspectMessage } from "../utils/scamShield.js";
 
@@ -74,8 +74,7 @@ export const getUserChats = async (req, res) => {
 
 export const getSocketTicket = async (req, res) => {
   try {
-    const authData = typeof req.auth === "function" ? await req.auth() : req.auth;
-    const userId = authData?.userId;
+    const userId = req.userId || (await getAuthData(req))?.userId;
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }

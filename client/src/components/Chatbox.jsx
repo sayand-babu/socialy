@@ -40,8 +40,10 @@ const Chatbox = () => {
 
     const connect = async () => {
       try {
-        const ticket = await getSocketTicket(await getToken());
-        if (stopped) return;
+        const token = await getToken();
+        if (!token || stopped) return;
+        const ticket = await getSocketTicket(token);
+        if (stopped || !ticket) return;
 
         socket = new WebSocket(getChatSocketUrl(ticket));
         socket.onmessage = (event) => {

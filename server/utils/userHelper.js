@@ -2,6 +2,20 @@ import clerkClient from "../config/clerk.js";
 import prisma from "../config/prisma.js";
 
 /**
+ * Safely resolves Clerk auth data whether req.auth is a function or an object.
+ */
+export const getAuthData = async (req) => {
+  try {
+    if (typeof req?.auth === "function") {
+      return await req.auth();
+    }
+    return req?.auth || {};
+  } catch {
+    return {};
+  }
+};
+
+/**
  * Ensures that a User record exists in PostgreSQL for the given Clerk userId.
  * If not present, queries Clerk API and upserts into database.
  * @param {string} userId - Clerk user ID
