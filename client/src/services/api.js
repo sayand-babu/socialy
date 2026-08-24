@@ -1,13 +1,19 @@
 import axios from 'axios';
 
-// Determine API base URL based on environment (supports VITE_API_URL and VITE_BASE_URL)
-const rawBase =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_BASE_URL ||
-  'http://localhost:3000';
-const API_BASE_URL = rawBase.endsWith('/api')
-  ? rawBase
-  : `${rawBase.replace(/\/+$/, '')}/api`;
+// Determine API base URL based on environment (supports relative /api on Vercel)
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL;
+  if (envUrl) {
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/+$/, '')}/api`;
+  }
+  // In production browser environments, use relative /api to proxy via Vercel HTTPS rewrites
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return '/api';
+  }
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Create axios instance with default config
 const api = axios.create({
