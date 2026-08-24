@@ -109,6 +109,24 @@ const Chatbox = () => {
     return () => { cancelled = true; };
   }, [chatId, getToken, isOpen, listing]);
 
+  // Real-time fallback: periodic sync while chat is open
+  useEffect(() => {
+    if (!chat?.id || !isOpen) return undefined;
+    const pollTimer = setInterval(async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const data = await getMessages(chat.id, token);
+        if (data?.messages) {
+          setMessages(data.messages);
+        }
+      } catch {
+        // Quietly fail background sync
+      }
+    }, 4000);
+    return () => clearInterval(pollTimer);
+  }, [chat?.id, getToken, isOpen]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
