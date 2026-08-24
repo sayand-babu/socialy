@@ -74,11 +74,15 @@ export const getUserChats = async (req, res) => {
 
 export const getSocketTicket = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const authData = typeof req.auth === "function" ? await req.auth() : req.auth;
+    const userId = authData?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     res.json({ ticket: createSocketTicket(userId) });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error.code || error.message });
+    console.error("getSocketTicket error:", error);
+    res.status(401).json({ message: error.code || error.message || "Unauthorized" });
   }
 };
 

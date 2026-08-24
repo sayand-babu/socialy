@@ -30,10 +30,17 @@ export const getSocketTicket = async (token) => {
 };
 
 export const getChatSocketUrl = (ticket) => {
-  const rawBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || 'http://localhost:3000/api';
-  const apiUrl = new URL(rawBase.endsWith('/api') ? rawBase : `${rawBase.replace(/\/+$/, '')}/api`);
-  apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-  apiUrl.pathname = '/ws';
-  apiUrl.search = `ticket=${encodeURIComponent(ticket)}`;
-  return apiUrl.toString();
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL;
+  if (envUrl && (envUrl.startsWith('http://') || envUrl.startsWith('https://'))) {
+    const parsed = new URL(envUrl);
+    parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    parsed.pathname = '/ws';
+    parsed.search = `ticket=${encodeURIComponent(ticket)}`;
+    return parsed.toString();
+  }
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws?ticket=${encodeURIComponent(ticket)}`;
+  }
+  return `ws://localhost:3000/ws?ticket=${encodeURIComponent(ticket)}`;
 };

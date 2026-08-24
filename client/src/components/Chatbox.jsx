@@ -58,11 +58,11 @@ const Chatbox = () => {
           }
         };
         socket.onclose = () => {
-          if (!stopped) reconnectTimer = setTimeout(connect, 3000);
+          if (!stopped) reconnectTimer = setTimeout(connect, 5000);
         };
         socket.onerror = () => socket.close();
-      } catch {
-        if (!stopped) reconnectTimer = setTimeout(connect, 3000);
+      } catch (err) {
+        if (!stopped) reconnectTimer = setTimeout(connect, 10000);
       }
     };
 
