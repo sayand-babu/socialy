@@ -21,7 +21,8 @@ const findParticipantChat = async (chatId, userId) =>
 
 export const getOrCreateChat = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     await ensureUserExists(userId);
     const listing = await prisma.listing.findFirst({
       where: { id: req.params.listingId, status: "active" },
@@ -58,7 +59,8 @@ export const getOrCreateChat = async (req, res) => {
 
 export const getUserChats = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     await ensureUserExists(userId);
     const chats = await prisma.chat.findMany({
       where: { OR: [{ ownerUserId: userId }, { chatUserId: userId }] },
@@ -87,7 +89,8 @@ export const getSocketTicket = async (req, res) => {
 
 export const getChatMessages = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const chat = await findParticipantChat(req.params.chatId, userId);
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
@@ -104,7 +107,8 @@ export const getChatMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const chat = await findParticipantChat(req.params.chatId, userId);
     const rawMessage = req.body.message || "";
     const messageText = sanitizeText(rawMessage);
