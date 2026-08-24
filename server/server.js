@@ -39,6 +39,17 @@ app.use(globalRateLimiter);
 // 6. Clerk Authentication Middleware
 app.use(clerkMiddleware());
 
+// Polyfill req.auth to be seamlessly callable as a function OR accessed as an object
+app.use((req, res, next) => {
+  if (req.auth && typeof req.auth !== "function") {
+    const authObj = req.auth;
+    const authFn = () => authObj;
+    Object.assign(authFn, authObj);
+    req.auth = authFn;
+  }
+  next();
+});
+
 app.get("/", (req, res) => res.send("server is alive"));
 app.use("/api/inngest/", serve({ client: inngest, functions }));
 

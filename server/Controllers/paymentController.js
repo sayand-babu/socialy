@@ -5,7 +5,7 @@ import {
   getRazorpayKeyId,
   getRazorpayKeySecret,
 } from "../config/razorpay.js";
-import { ensureUserExists } from "../utils/userHelper.js";
+import { ensureUserExists, getAuthData } from "../utils/userHelper.js";
 import { delCache, delCachePattern } from "../config/redis.js";
 import { inngest } from "../src/inngest/index.js";
 
@@ -14,7 +14,8 @@ import { inngest } from "../src/inngest/index.js";
  */
 export const createRazorpayOrder = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     await ensureUserExists(userId);
 
     const { listingId } = req.body;
@@ -113,7 +114,8 @@ export const createRazorpayOrder = async (req, res) => {
  */
 export const verifyRazorpayPayment = async (req, res) => {
   try {
-    const { userId } = await req.auth();
+    const userId = req.userId || (await getAuthData(req))?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     await ensureUserExists(userId);
 
     const {
