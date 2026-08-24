@@ -49,6 +49,64 @@
 
 ---
 
+## 🔄 Dual-Path Escrow Lifecycle (Verified vs. Unverified)
+
+Socialy implements a strict dual-path escrow lifecycle based on whether the listing underwent pre-sale administrative verification:
+
+```mermaid
+flowchart TD
+    %% Styling
+    classDef verified fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#065f46;
+    classDef unverified fill:#fefce8,stroke:#ca8a04,stroke-width:2px,color:#854d0e;
+    classDef dispute fill:#fef2f2,stroke:#dc2626,stroke-width:2px,color:#991b1b;
+    classDef system fill:#f3e8ff,stroke:#7e22ce,stroke-width:2px,color:#581c87;
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:3px,color:#14532d;
+
+    %% Entry
+    Start["Seller Creates Listing & Deposits Credentials into AES-256 Vault"] --> PreSale{"Admin Pre-Sale Verification?"}
+
+    %% PATH A: Platform-Verified
+    PreSale -- "Admin Verified (Valid Credentials)" --> PathA["🟢 PATH A: Platform-Verified Listing<br/>(isVerified = true)"]:::verified
+    PathA --> BuyA["Buyer Checkout via Razorpay<br/>Credentials Released in /my-orders"]:::verified
+    BuyA --> ClockA["Inngest 24-Hour Inspection Clock Begins"]:::system
+    ClockA --> DispA{"Buyer Action in 24h"}
+
+    DispA -- "No Issue / Timer Expires" --> SuccessA["✅ Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
+    DispA -- "Full-Scope Dispute Opened" --> ScopeA["Dispute Scope: FULL<br/>(Credentials, Metrics, Shadowban, Access)"]:::dispute
+
+    %% PATH B: Unverified
+    PreSale -- "Pending / Not Pre-Screened" --> PathB["🟡 PATH B: Unverified Listing<br/>(isVerified = false, isCredentialSubmitted = true)"]:::unverified
+    PathB --> BuyB["Buyer Checkout via Razorpay<br/>Vault Credentials Released in /my-orders"]:::unverified
+    BuyB --> ClockB["Inngest 24-Hour Inspection Clock Begins"]:::system
+    ClockB --> DispB{"Buyer Action in 24h"}
+
+    DispB -- "No Issue / Timer Expires" --> SuccessB["✅ Escrow Settlement<br/>95% to Seller | 5% Platform Fee"]:::success
+    DispB -- "Credentials-Only Dispute Opened" --> ScopeB["Dispute Scope: STRICT / CREDENTIALS-ONLY<br/>(Wrong Password, 2FA Block, Recovery Fail)"]:::dispute
+
+    %% Dispute Resolution (Common)
+    ScopeA --> SellerDeadline["Seller Given 24 Hours for Counter-Evidence"]:::system
+    ScopeB --> SellerDeadline
+
+    SellerDeadline --> Resolution{"Admin Ruling & Evidence Review"}
+    Resolution -- "Buyer Valid / Bad Credentials" --> Refund["🔴 100% Refund to Buyer<br/>+1 Strike to Seller (3 Strikes = Ban)"]:::dispute
+    Resolution -- "Seller Valid / Fraud Claim" --> SuccessA
+    Resolution -- "1-Time Credential Error" --> Resubmit["Admin Grants 1-Time Resubmission<br/>(status: faulty_resubmit_allowed)"]:::system
+    Resubmit --> PathB
+```
+
+### 📊 Comparison: Platform-Verified vs. Unverified Escrow
+
+| Dimension | 🟢 Platform-Verified (`isVerified: true`) | 🟡 Unverified (`isVerified: false`) |
+|---|---|---|
+| **Pre-Sale Status** | Pre-tested and validated by Socialy Admin | Directly listed after credential vault deposit |
+| **Trust Badge** | 🛡️ Verified Platform Badge displayed | 🔒 Escrow Ready (Vault Secured) |
+| **Buyer Protection** | 100% Escrow Fund Protection | 100% Escrow Fund Protection |
+| **Inspection Window** | 24 Hours (Inngest Durable Workflow) | 24 Hours (Inngest Durable Workflow) |
+| **Dispute Scope** | **Full Scope**: Credentials, follower analytics, shadowban checks, audience demographic accuracy | **Strict / Credentials-Only**: Invalid login credentials, 2FA lockout, recovery email failure |
+| **Settlement Distribution** | 95% Seller Wallet / 5% Platform Fee | 95% Seller Wallet / 5% Platform Fee |
+
+---
+
 ## 🏗️ System Architecture
 
 ```text
