@@ -110,23 +110,36 @@ flowchart TD
 ## System Architecture
 
 ```text
-                                  User / Client
-                                       │
-                      ┌────────────────┴────────────────┐
-                      ▼                                 ▼
-        [ Vercel Edge CDN ($0) ]            [ AWS EC2 Linux Server ($0) ]
-        • React 18 + Vite SPA               • Node.js Express REST API (Port 3000)
-        • Tailwind CSS + Lucide Icons       • WebSocket Real-time Chat
-        • Instant Global Page Loads         • AES-256-GCM Vault Manager
-        • Free SSL / HTTPS (Vercel)         • Razorpay Payment Webhook Engine
-                                                        │
-                      ┌─────────────────────────────────┼─────────────────────────────────┐
-                      ▼                                 ▼                                 ▼
-           [ Redis 7 Container ]             [ Inngest Engine ]             [ Neon Cloud Postgres ]
-           • Marketplace Query Cache         • 24h Escrow Countdown         • Prisma ORM
-           • Rate Limiting                   • 24h Dispute Deadline         • Connection Pooling
-           • Socket Session State            • Resilient Event Queues       • Full Audit Logs
+                                   User / Client Browser
+                                             │
+                       ┌─────────────────────┴─────────────────────┐
+                       ▼ (HTTPS UI & REST Calls)                   ▼ (Direct WSS Socket Stream)
+        [ Vercel Edge Server (Reverse Proxy) ]       [ Cloudflare Global Edge Network ]
+        • React 18 + Vite SPA CDN Hosting            • Dedicated TLS / SSL Termination
+        • TLS/HTTPS Reverse Proxy Middleman          • Outbound Cloudflare Zero-Trust Tunnel
+        • Proxies /api/* requests securely           • Native WSS WebSocket Bridge (/ws)
+                       │                                           │
+                       └─────────────────────┬─────────────────────┘
+                                             │
+                                             ▼
+                               [ AWS EC2 Linux Server ($0) ]
+                               • Node.js Express REST API (Port 3000)
+                               • WebSocket Chat Server (ws package)
+                               • AES-256-GCM Zero-Trust Vault Manager
+                               • Razorpay Payment Webhook Engine
+                                             │
+                       ┌─────────────────────┼─────────────────────┐
+                       ▼                     ▼                     ▼
+            [ Redis 7 Container ]   [ Inngest Engine ]   [ Neon Cloud Postgres ]
+            • Marketplace Cache     • 24h Escrow Timers  • Prisma ORM
+            • Rate Limiting         • Dispute Deadlines  • Connection Pooling
+            • Socket Session State  • Event Queues       • Full Audit Logs
 ```
+
+### Edge Reverse Proxy & Tunneling Mechanics
+
+1. **Vercel Reverse Proxy Middleman**: The user's browser interacts strictly with `https://socialy-beige.vercel.app`. For REST API calls, Vercel acts as a secure TLS-terminating reverse proxy via `vercel.json` rewrites, accepting the encrypted HTTPS request and fetching data from the backend behind the scenes. This guarantees zero "Mixed Content" browser security violations.
+2. **Cloudflare Zero-Trust Tunnel**: A lightweight `cloudflared` daemon runs directly on AWS EC2, creating an outbound encrypted pipeline to Cloudflare's global edge network. This exposes a secure `https://` and persistent `wss://` endpoint, allowing real-time bidirectional WebSocket chat without requiring manual SSL certificate management on the host.
 
 ---
 
