@@ -113,33 +113,32 @@ flowchart TD
                                    User / Client Browser
                                              │
                        ┌─────────────────────┴─────────────────────┐
-                       ▼ (HTTPS UI & REST Calls)                   ▼ (Direct WSS Socket Stream)
-        [ Vercel Edge Server (Reverse Proxy) ]       [ Cloudflare Global Edge Network ]
-        • React 18 + Vite SPA CDN Hosting            • Dedicated TLS / SSL Termination
-        • TLS/HTTPS Reverse Proxy Middleman          • Outbound Cloudflare Zero-Trust Tunnel
-        • Proxies /api/* requests securely           • Native WSS WebSocket Bridge (/ws)
-                       │                                           │
-                       └─────────────────────┬─────────────────────┘
-                                             │
-                                             ▼
-                               [ AWS EC2 Linux Server ($0) ]
-                               • Node.js Express REST API (Port 3000)
-                               • WebSocket Chat Server (ws package)
-                               • AES-256-GCM Zero-Trust Vault Manager
-                               • Razorpay Payment Webhook Engine
-                                             │
-                       ┌─────────────────────┼─────────────────────┐
-                       ▼                     ▼                     ▼
-            [ Redis 7 Container ]   [ Inngest Engine ]   [ Neon Cloud Postgres ]
-            • Marketplace Cache     • 24h Escrow Timers  • Prisma ORM
-            • Rate Limiting         • Dispute Deadlines  • Connection Pooling
-            • Socket Session State  • Event Queues       • Full Audit Logs
+                       ▼ (Static SPA HTML/CSS/JS Assets)           ▼ (Secure HTTPS REST & Persistent WSS Chat)
+        [ Vercel Edge CDN Hosting ]                  [ Cloudflare Zero-Trust Global Edge ]
+        • React 18 + Vite SPA Build Distribution     • Automated TLS / SSL Termination (HTTPS + WSS)
+        • Instant Global Asset Delivery              • DDoS Mitigation & Traffic Filtering
+        • Zero Serverless Proxy Overhead             • Outbound-Only Encrypted Tunnel (cloudflared)
+                                                                   │
+                                                                   ▼
+                                                     [ AWS EC2 Linux Server ($0) ]
+                                                     • Node.js Express REST API (Port 3000)
+                                                     • WebSocket Chat Server (ws package)
+                                                     • AES-256-GCM Zero-Trust Vault Manager
+                                                     • Razorpay Payment Webhook Engine
+                                                                   │
+                                             ┌─────────────────────┼─────────────────────┐
+                                             ▼                     ▼                     ▼
+                                  [ Redis 7 Container ]   [ Inngest Engine ]   [ Neon Cloud Postgres ]
+                                  • Marketplace Cache     • 24h Escrow Timers  • Prisma ORM
+                                  • Rate Limiting         • Dispute Deadlines  • Connection Pooling
+                                  • Socket Session State  • Event Queues       • Full Audit Logs
 ```
 
-### Edge Reverse Proxy & Tunneling Mechanics
+### Cloudflare Zero-Trust Edge Networking Mechanics
 
-1. **Vercel Reverse Proxy Middleman**: The user's browser interacts strictly with `https://socialy-beige.vercel.app`. For REST API calls, Vercel acts as a secure TLS-terminating reverse proxy via `vercel.json` rewrites, accepting the encrypted HTTPS request and fetching data from the backend behind the scenes. This guarantees zero "Mixed Content" browser security violations.
-2. **Cloudflare Zero-Trust Tunnel**: A lightweight `cloudflared` daemon runs directly on AWS EC2, creating an outbound encrypted pipeline to Cloudflare's global edge network. This exposes a secure `https://` and persistent `wss://` endpoint, allowing real-time bidirectional WebSocket chat without requiring manual SSL certificate management on the host.
+1. **Outbound-Only Encrypted Tunnel**: A lightweight `cloudflared` daemon runs as a persistent service on the AWS EC2 instance, establishing an outbound-only TLS tunnel to Cloudflare's global edge network. This eliminates the requirement to expose raw inbound ports on the AWS security group.
+2. **Unified HTTPS & WSS Edge Gateway**: Cloudflare handles SSL/TLS termination at the edge, providing a single secure endpoint for both stateless HTTP REST APIs (`https://`) and stateful, persistent bidirectional WebSocket streams (`wss://`). This bypasses serverless connection timeouts while completely eliminating browser Mixed Content security violations.
+3. **Decoupled Architecture**: Vercel acts purely as a fast static asset CDN for the React application, while dynamic transactions, real-time messaging, and cryptographic vault operations are serviced by the AWS backend through Cloudflare.
 
 ---
 
